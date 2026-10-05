@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@font-face { font-family: "Fraunces:SemiBold Italic"; src: url("https://static.figma.com/font/Fraunces-Italic_SOFT_WONK_opsz_wght__1") format("woff2"); font-style: italic; font-weight: 600; }
+@font-face { font-family: "Instrument Sans:Bold"; src: url("https://static.figma.com/font/InstrumentSans_wdth_wght__1") format("woff2"); font-style: normal; font-weight: 700; }
+@font-face { font-family: "Instrument Sans:Medium"; src: url("https://static.figma.com/font/InstrumentSans_wdth_wght__1") format("woff2"); font-style: normal; font-weight: 500; }
+@font-face { font-family: "Instrument Sans:Regular"; src: url("https://static.figma.com/font/InstrumentSans_wdth_wght__1") format("woff2"); font-style: normal; font-weight: 400; }
+@font-face { font-family: "Instrument Sans:SemiBold"; src: url("https://static.figma.com/font/InstrumentSans_wdth_wght__1") format("woff2"); font-style: normal; font-weight: 600; }
+@font-face { font-family: "Noto Sans Math:Regular"; src: url("https://static.figma.com/font/NotoSansMath-Regular_1") format("woff2"); font-style: normal; font-weight: 400; }
+@font-face { font-family: "Noto Sans Symbols2:Regular"; src: url("https://static.figma.com/font/NotoSansSymbols2-Regular_5") format("woff2"); font-style: normal; font-weight: 400; }
+@font-face { font-family: "Noto Sans Symbols:Bold"; src: url("https://static.figma.com/font/NotoSansSymbols-VF_2") format("woff2"); font-style: normal; font-weight: 700; }
+@font-face { font-family: "Noto Sans:Bold"; src: url("https://static.figma.com/font/NotoSans-VF_3") format("woff2"); font-style: normal; font-weight: 700; }
+@font-face { font-family: "Noto Sans:Medium"; src: url("https://static.figma.com/font/NotoSans-VF_3") format("woff2"); font-style: normal; font-weight: 500; }
+@font-face { font-family: "Noto Sans:Regular"; src: url("https://static.figma.com/font/NotoSans-VF_3") format("woff2"); font-style: normal; font-weight: 400; }
+@font-face { font-family: "Noto Sans:SemiBold"; src: url("https://static.figma.com/font/NotoSans-VF_3") format("woff2"); font-style: normal; font-weight: 600; }
+
+@font-face { font-family: "Evolventa"; src: url("/fonts/Evolventa-Regular.woff") format("woff"); font-style: normal; font-weight: 400; }
+@font-face { font-family: "Evolventa"; src: url("/fonts/Evolventa-Bold.woff") format("woff"); font-style: normal; font-weight: 700; }
+
+@layer utilities {
+  .font-evo { font-family: "Evolventa", sans-serif; font-weight: 400; }
+  .font-evo-bold { font-family: "Evolventa", sans-serif; font-weight: 700; }
+  .wdth { font-variation-settings: "wdth" 100; }
+  .wonk { font-variation-settings: "SOFT" 0, "WONK" 1; }
+
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.8s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1); transition-delay: var(--d, 0ms); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  .animate-marquee { animation: marquee 32s linear infinite; }
+  .animate-wave { animation: wave-in 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .animate-bump { animation: bump 0.5s cubic-bezier(0.3, 1.6, 0.5, 1); }
+  .animate-fade { animation: fade-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .animate-page { animation: fade-up 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .animate-draw { stroke-dasharray: 1; }
+}
+
+@keyframes marquee { to { transform: translateX(-50%); } }
+@keyframes wave-in { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .animate-marquee, .animate-wave, .animate-float, .animate-bump, .animate-fade, .animate-page { animation: none; }
+}
+
+html { scroll-behavior: smooth; scrollbar-gutter: stable; }
+
+/* Global UI scale unit: 1px on small screens, grows with wide desktop viewports */
+:root { --u: 1px; }
+/* scaled unit; values are rounded to a 4px grid via round() */
+@media (min-width: 1600px) { :root { --u: 1.2px; } }
