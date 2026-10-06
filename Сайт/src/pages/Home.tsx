@@ -98,7 +98,7 @@ export default function Home({ go, openProduct }: { go: (p: Page) => void; openP
           ))}
         </div>
         <div className="mt-[round(calc(var(--u)*40),4px)] flex justify-center">
-          <PrimaryButton onClick={() => go('menu')}>Переглянути все меню</PrimaryButton>
+          <PrimaryButton onClick={() => go('menu')} className="max-md:!max-w-none">Переглянути все меню</PrimaryButton>
         </div>
       </section>
 
