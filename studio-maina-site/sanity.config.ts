@@ -8,7 +8,7 @@ export default defineConfig({
   name: 'default',
   title: 'Maina-site',
 
-  projectId: 'ifvo36e6',
+  projectId: 'x57ts4vi',
   dataset: 'production',
 
   plugins: [structureTool({structure}), visionTool()],
