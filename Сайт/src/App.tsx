@@ -1,26 +1,30 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Footer, Header, type Page } from './components/Layout'
 import Home from './pages/Home'
 import Menu from './pages/Menu'
 import Product from './pages/Product'
 import Cart, { type Line } from './components/Cart'
-import { sanitizeLines } from './data/catalog.js'
+import { useContent } from './lib/content'
+import { sanitizeLines } from './lib/order-math.js'
 
 export default function App() {
+  const { byId, products } = useContent()
   const [page, setPage] = useState<Page>('home')
-  const [lines, setLines] = useState<Line[]>(() => {
+  const [rawLines, setRawLines] = useState<unknown>(() => {
     try {
-      // Товари, яких більше немає в каталозі, відкидаємо, щоб сайт не ламався
-      return sanitizeLines(JSON.parse(localStorage.getItem('cart') ?? '[]'))
+      return JSON.parse(localStorage.getItem('cart') ?? '[]')
     } catch {
       return []
     }
   })
+  // Товари й варіанти, яких більше немає в каталозі (їх прибрали в Sanity), відкидаємо, щоб сайт не ламався
+  const lines = useMemo<Line[]>(() => sanitizeLines(rawLines, byId), [rawLines, byId])
+  const setLines = (update: (ls: Line[]) => Line[]) => setRawLines((raw: unknown) => update(sanitizeLines(raw, byId)))
   const [bump, setBump] = useState(0)
   const [cartOpen, setCartOpen] = useState(false)
   const cart = lines.reduce((s, l) => s + l.qty, 0)
   useEffect(() => localStorage.setItem('cart', JSON.stringify(lines)), [lines])
-  const [pid, setPid] = useState('pelmeni')
+  const [pid, setPid] = useState(products[0].id)
 
   const go = (p: Page) => {
     setPage(p)
@@ -30,7 +34,7 @@ export default function App() {
     setPid(id)
     go('product')
   }
-  const add = (id: string, opt: number) => {
+  const add = (id: string, opt: string) => {
     setLines((ls) => {
       const i = ls.findIndex((l) => l.id === id && l.opt === opt)
       return i < 0 ? [...ls, { id, opt, qty: 1 }] : ls.map((l, j) => (j === i ? { ...l, qty: l.qty + 1 } : l))
@@ -63,7 +67,7 @@ export default function App() {
         lines={lines}
         onClose={closeCart}
         setQty={setQty}
-        onClear={() => setLines([])}
+        onClear={() => setRawLines([])}
         onOpenProduct={(id) => {
           setCartOpen(false)
           open(id)

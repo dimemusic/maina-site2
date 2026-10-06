@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { A, PrimaryButton, Wave, type Page } from '../components/Layout'
-import { MenuCard, P } from '../components/Products'
-import { D } from '../components/details'
+import { MenuCard } from '../components/Products'
+import { sized, useContent, type Product as ProductData } from '../lib/content'
 
 // Close-up crops of the single product photo when there's no dedicated gallery
 const CROPS = [
@@ -11,10 +11,30 @@ const CROPS = [
   { z: 2.2, o: '50% 80%' },
 ]
 
-export default function Product({ id, go, openProduct, onAdd }: { id: string; go: (p: Page) => void; openProduct: (id: string) => void; onAdd: (id: string, opt: number) => void }) {
-  const p = P[id]
-  const d = D[id]
-  const gallery = d.gallery ? d.gallery.map((src) => ({ src, z: 1, o: '50% 50%' })) : CROPS.map((c) => ({ src: p.img, ...c }))
+type Props = { go: (p: Page) => void; openProduct: (id: string) => void; onAdd: (id: string, opt: string) => void }
+
+export default function Product({ id, ...rest }: Props & { id: string }) {
+  const { byId } = useContent()
+  const p = byId[id]
+  // Товар могли прибрати в Sanity, поки сторінка була відкрита
+  if (!p) {
+    return (
+      <main className="flex flex-col items-center gap-4 px-6 py-[round(calc(var(--u)*120),4px)] text-center">
+        <p className="font-evo-bold text-[length:round(calc(var(--u)*24),2px)] text-[#3a4c38]">Такого товару вже немає</p>
+        <PrimaryButton onClick={() => rest.go('menu')}>До меню</PrimaryButton>
+      </main>
+    )
+  }
+  return <ProductView p={p} {...rest} />
+}
+
+function ProductView({ p, go, openProduct, onAdd }: Props & { p: ProductData }) {
+  const { byId } = useContent()
+  const id = p.id
+  const d = p.details
+  const related = d.related.map((rid) => byId[rid]).filter((r): r is ProductData => !!r)
+  // Перше фото — головне; якщо додаткових немає, показуємо наближені фрагменти головного
+  const gallery = p.gallery.length > 0 ? [p.img, ...p.gallery].map((src) => ({ src: sized(src, 1200), z: 1, o: '50% 50%' })) : CROPS.map((c) => ({ src: sized(p.img, 1200), ...c }))
   const [img, setImg] = useState(0)
   const [sel, setSel] = useState(0)
   const opt = p.opts[sel]
@@ -29,7 +49,7 @@ export default function Product({ id, go, openProduct, onAdd }: { id: string; go
         <p className="animate-page font-['Montserrat',sans-serif] wdth mt-[round(calc(var(--u)*64),4px)] text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*24),4px)] font-normal whitespace-pre text-[#6d746a]">
           <button onClick={() => go('menu')} className="cursor-pointer transition-colors hover:text-[#3a4c38] hover:underline">Асортимент</button>
           {'  /  '}
-          <button onClick={() => go('menu')} className="cursor-pointer transition-colors hover:text-[#3a4c38] hover:underline">{d.cat}</button>
+          <button onClick={() => go('menu')} className="cursor-pointer transition-colors hover:text-[#3a4c38] hover:underline">{p.cat}</button>
           {`  /  ${p.name}`}
         </p>
 
@@ -83,7 +103,7 @@ export default function Product({ id, go, openProduct, onAdd }: { id: string; go
               <PrimaryButton
                 className="h-[round(calc(var(--u)*64),4px)]! max-w-[round(calc(var(--u)*224),4px)] gap-[round(calc(var(--u)*16),4px)] px-[round(calc(var(--u)*24),4px)]"
                 onClick={() => {
-                  onAdd(id, sel)
+                  onAdd(id, opt.key)
                   setAdded(true)
                   setTimeout(() => setAdded(false), 1400)
                 }}
@@ -131,10 +151,10 @@ export default function Product({ id, go, openProduct, onAdd }: { id: string; go
           <div key={tab} className="animate-fade">
             {tab === 'desc' ? (
               <>
-                <Block title="СКЛАД:" text={d.composition} border />
-                <Block title="ТЕРМІН ПРИДАТНОСТІ:" text={d.shelf} border />
+                {d.composition && <Block title="СКЛАД:" text={d.composition} border />}
+                {d.shelf && <Block title="ТЕРМІН ПРИДАТНОСТІ:" text={d.shelf} border />}
                 <div className="mt-[round(calc(var(--u)*16),4px)] flex flex-col gap-[round(calc(var(--u)*8),4px)] text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)]">
-                  {['Енергетична цінність продукту:', 'Білки:', 'Вуглеводи:'].map((k, i) => [k, ` ${d.nutrition[i]}`]).map(([k, v]) => (
+                  {['Енергетична цінність продукту:', 'Білки:', 'Вуглеводи:'].map((k, i) => [k, ` ${d.nutrition[i]}`]).filter((_, i) => d.nutrition[i]).map(([k, v]) => (
                     <p key={k} className="font-['Montserrat',sans-serif] wdth font-normal text-[#4c5147]">
                       <span className="font-['Montserrat',sans-serif] font-semibold text-[#262626]">{k}</span>
                       {v}
@@ -143,20 +163,24 @@ export default function Product({ id, go, openProduct, onAdd }: { id: string; go
                 </div>
               </>
             ) : (
-              <Block title="СПОСІБ ПРИГОТУВАННЯ:" text={d.prep} />
+              d.prep && <Block title="СПОСІБ ПРИГОТУВАННЯ:" text={d.prep} />
             )}
           </div>
         </div>
 
         {/* Related */}
-        <h2 className="reveal font-['Montserrat',sans-serif] font-semibold mt-[round(calc(var(--u)*88),4px)] text-[length:round(calc(var(--u)*40),2px)] leading-[round(calc(var(--u)*48),4px)] text-[#3a4c38] lg:-ml-[round(calc(var(--u)*8),4px)]">{'Вам також сподобається '}</h2>
-        <div className="mt-[round(calc(var(--u)*24),4px)] grid grid-cols-1 gap-[round(calc(var(--u)*24),4px)] sm:grid-cols-2 lg:grid-cols-4">
-          {d.related.map((rid, i) => (
-            <div key={rid} className="reveal" style={{ ['--d' as string]: `${i * 90}ms` }}>
-              <MenuCard p={P[rid]} onOpen={() => openProduct(rid)} onAdd={onAdd} />
+        {related.length > 0 && (
+          <>
+            <h2 className="reveal font-['Montserrat',sans-serif] font-semibold mt-[round(calc(var(--u)*88),4px)] text-[length:round(calc(var(--u)*40),2px)] leading-[round(calc(var(--u)*48),4px)] text-[#3a4c38] lg:-ml-[round(calc(var(--u)*8),4px)]">{'Вам також сподобається '}</h2>
+            <div className="mt-[round(calc(var(--u)*24),4px)] grid grid-cols-1 gap-[round(calc(var(--u)*24),4px)] sm:grid-cols-2 lg:grid-cols-4">
+              {related.map((r, i) => (
+                <div key={r.id} className="reveal" style={{ ['--d' as string]: `${i * 90}ms` }}>
+                  <MenuCard p={r} onOpen={() => openProduct(r.id)} onAdd={onAdd} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
         <div className="mt-[round(calc(var(--u)*40),4px)] flex justify-center">
           <PrimaryButton onClick={() => go('menu')}>Весь асортимент</PrimaryButton>
         </div>

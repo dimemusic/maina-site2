@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { contactLinks, useContent } from '../lib/content'
 
 export const A = '/assets'
 
@@ -34,13 +35,20 @@ function scrollToContacts(go?: (p: Page) => void) {
 
 const NAV = ['Асортимент', 'Про нас', 'Замовлення', 'Контакти']
 
-const SOCIALS = [
-  ['Instagram', 'https://instagram.com/maina.by.rivka', <><rect key="a" x="3" y="3" width="18" height="18" rx="5" /><circle key="b" cx="12" cy="12" r="4" /><circle key="c" cx="17.5" cy="6.5" r="0.6" fill="currentColor" /></>],
-  ['Telegram', 'https://t.me/', <path key="a" d="M21 4 3 11l6 2.5M21 4l-3 16-9-6.5M21 4 9 13.5V19l3-3.5" />],
-  ['Viber', 'viber://chat?number=%2B380670000000', <path key="a" d="M12 3c-5 0-8 2.5-8 7.5 0 3 1 5 3 6.2V21l3-2.6c.6.1 1.3.1 2 .1 5 0 8-2.5 8-7.5S17 3 12 3Zm-2.5 5c.6 1.8 2.2 3.6 4.5 4.6l1-.9 1.5.8c-.3 1-1 1.5-2 1.4-3-.6-5.5-3.2-6-6 0-1 .6-1.7 1.5-1.9l.8 1.5Z" />],
-] as const
+// Іконки соцмереж лишаються в дизайні, а самі посилання беруться з налаштувань у Sanity
+const SOCIAL_ICONS = {
+  instagram: <><rect key="a" x="3" y="3" width="18" height="18" rx="5" /><circle key="b" cx="12" cy="12" r="4" /><circle key="c" cx="17.5" cy="6.5" r="0.6" fill="currentColor" /></>,
+  telegram: <path key="a" d="M21 4 3 11l6 2.5M21 4l-3 16-9-6.5M21 4 9 13.5V19l3-3.5" />,
+  viber: <path key="a" d="M12 3c-5 0-8 2.5-8 7.5 0 3 1 5 3 6.2V21l3-2.6c.6.1 1.3.1 2 .1 5 0 8-2.5 8-7.5S17 3 12 3Zm-2.5 5c.6 1.8 2.2 3.6 4.5 4.6l1-.9 1.5.8c-.3 1-1 1.5-2 1.4-3-.6-5.5-3.2-6-6 0-1 .6-1.7 1.5-1.9l.8 1.5Z" />,
+}
+
+function useSocials() {
+  const links = contactLinks(useContent().site)
+  return ([['Instagram', links.instagram, SOCIAL_ICONS.instagram], ['Telegram', links.telegram, SOCIAL_ICONS.telegram], ['Viber', links.viber, SOCIAL_ICONS.viber]] as const).flatMap(([label, link, icon]) => (link ? [[label, link.href, icon] as const] : []))
+}
 
 function MobileMenu({ open, close, go, cart, onCart }: { open: boolean; close: () => void; go: (p: Page) => void; cart: number; onCart: () => void }) {
+  const socials = useSocials()
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : ''
     return () => void (document.body.style.overflow = '')
@@ -78,7 +86,7 @@ function MobileMenu({ open, close, go, cart, onCart }: { open: boolean; close: (
         ))}
       </nav>
       <div className="mt-auto flex items-center gap-6 px-8 pb-12">
-        {SOCIALS.map(([label, href, icon]) => (
+        {socials.map(([label, href, icon]) => (
           <a key={label} href={href} target="_blank" rel="noreferrer" aria-label={label} className="flex size-12 items-center justify-center rounded-full border border-[#3a4c38]/20 text-[#b05a3f] transition-colors active:bg-[#3a4c38]/8">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="size-6">{icon}</svg>
           </a>
@@ -90,15 +98,18 @@ function MobileMenu({ open, close, go, cart, onCart }: { open: boolean; close: (
 
 export function Header({ go, cart, bump, onCart }: { go: (p: Page) => void; cart: number; bump: number; onCart: () => void }) {
   const [menu, setMenu] = useState(false)
+  const { site } = useContent()
   return (
     <>
     <MobileMenu open={menu} close={() => setMenu(false)} go={go} cart={cart} onCart={onCart} />
     <header className="sticky top-0 z-40">
-      <div className="flex justify-center bg-[#3a4c38] px-[round(calc(var(--u)*16),4px)] py-[round(calc(var(--u)*8),4px)]">
-        <p className="font-['Montserrat',sans-serif] wdth text-center text-[10px] sm:text-[length:round(calc(var(--u)*12),2px)] font-normal leading-[round(calc(var(--u)*16),4px)] tracking-[1px] sm:tracking-[calc(var(--u)*2)] sm:whitespace-nowrap text-[#faf6ec] uppercase">
-          Доставка по всій Україні · Нова Пошта та кур’єр
-        </p>
-      </div>
+      {site.announcement && (
+        <div className="flex justify-center bg-[#3a4c38] px-[round(calc(var(--u)*16),4px)] py-[round(calc(var(--u)*8),4px)]">
+          <p className="font-['Montserrat',sans-serif] wdth text-center text-[10px] sm:text-[length:round(calc(var(--u)*12),2px)] font-normal leading-[round(calc(var(--u)*16),4px)] tracking-[1px] sm:tracking-[calc(var(--u)*2)] sm:whitespace-nowrap text-[#faf6ec] uppercase">
+            {site.announcement}
+          </p>
+        </div>
+      )}
       <div className="border-b border-[#e9e9e9] bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex h-[round(calc(var(--u)*60),4px)] max-w-[round(calc(var(--u)*1200),4px)] items-center gap-3 px-4 sm:gap-6 sm:px-6 xl:px-0">
           <div className="min-w-0 flex-1">
@@ -153,11 +164,12 @@ export function Wave() {
 }
 
 export function Footer({ gap = 16, go }: { gap?: number; go: (p: Page) => void }) {
+  const { site } = useContent()
   const rows = [
-    [`${A}/38537.svg`, 'м. _____ вул. ______'],
-    [`${A}/fe43d.svg`, '+ 380 XX XXX XX XX'],
-    [`${A}/06150.svg`, 'Пн - Нд  |  9:00 - 20:20'],
-  ]
+    [`${A}/38537.svg`, site.address],
+    [`${A}/fe43d.svg`, site.phone],
+    [`${A}/06150.svg`, site.workingHours],
+  ].filter(([, t]) => t)
   return (
     <footer id="contacts" className="scroll-mt-[round(calc(var(--u)*320),4px)] bg-[#3a4c38] px-6 pt-[round(calc(var(--u)*40),4px)] xl:px-0">
       <div className="mx-auto flex max-w-[round(calc(var(--u)*1200),4px)] flex-col gap-[round(calc(var(--u)*24),4px)]">
@@ -165,7 +177,7 @@ export function Footer({ gap = 16, go }: { gap?: number; go: (p: Page) => void }
           <div className="flex max-w-[round(calc(var(--u)*363),4px)] flex-col gap-[round(calc(var(--u)*16),4px)]">
             <Monogram light onClick={() => go('home')} />
             <p className="font-['Montserrat',sans-serif] wdth text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*24),4px)] font-normal text-[#808c7e]">
-              Це заморожені напівфабрикати, свіжий хліб, крафтові сири, ковбаси та консервація. Готуємо так, як для власної родини, і привозимо по всій Україні.
+              {site.about}
             </p>
           </div>
           <div className="flex w-[round(calc(var(--u)*177),4px)] flex-col" style={{ gap }}>

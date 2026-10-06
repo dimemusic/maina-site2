@@ -1,34 +1,15 @@
 import { useState } from 'react'
-import { A } from './Layout'
-import { CATALOG, promoDiscount, type CatalogItem, type Option, type Promo } from '../data/catalog.js'
+import { sized, type Product } from '../lib/content'
+import type { Promo } from '../lib/order-math.js'
 
-export { promoDiscount }
-export type { Option, Promo }
-export type Product = CatalogItem & { img: string }
-
-// Names, prices and promos live in src/data/catalog.js (shared with api/order.js); only images are added here.
-const IMG: Record<string, string> = {
-  varenyky: `${A}/b8623.png`,
-  kovbasa: `${A}/40cdf.png`,
-  khinkaliMeat: `${A}/e8c65.png`,
-  vyshnya: `${A}/9f603.png`,
-  khlib: `${A}/1835a.png`,
-  khinkaliCheese: `${A}/50585.png`,
-  pelmeni: `${A}/1bf7b.png`,
-  syr: `${A}/9e5d6.png`,
-  cinnabon: 'https://images.unsplash.com/photo-1694632288834-17d86b340745?auto=format&fit=crop&w=1080&q=80',
-  syrnyky: 'https://images.unsplash.com/photo-1681760161787-858b651df036?auto=format&fit=crop&w=1080&q=80',
-  strudel: 'https://images.unsplash.com/photo-1657313938000-23c4322dbe22?auto=format&fit=crop&w=1080&q=80',
-}
-
-export const P: Record<string, Product> = Object.fromEntries(Object.entries(CATALOG).map(([id, p]) => [id, { ...p, img: IMG[id] ?? '' }]))
+// Товари, ціни й акції приходять із Sanity (src/lib/content.tsx), тут лише картки.
 
 /* Home "Хіти продажів" card */
 export function HitCard({ p, onOpen }: { p: Product; onOpen: () => void }) {
   return (
     <article onClick={onOpen} className="group flex min-h-[round(calc(var(--u)*368),4px)] cursor-pointer flex-col gap-[round(calc(var(--u)*8),4px)] rounded-t-[round(calc(var(--u)*8),4px)] border-b border-[#3a4c38] pb-[round(calc(var(--u)*16),4px)] transition-transform duration-500 ease-out hover:-translate-y-1.5">
       <div className="relative isolate h-[round(calc(var(--u)*179),4px)] w-full overflow-hidden rounded-t-[round(calc(var(--u)*8),4px)] [contain:paint]">
-        <img alt={p.name} src={p.img} className="size-full transform-gpu object-cover [backface-visibility:hidden] transition-transform duration-700 ease-out will-change-transform group-hover:scale-[1.08]" />
+        <img alt={p.name} src={sized(p.img, 640)} loading="lazy" className="size-full transform-gpu object-cover [backface-visibility:hidden] transition-transform duration-700 ease-out will-change-transform group-hover:scale-[1.08]" />
         {p.sale && <SaleBadge promo={p.sale} />}
         <div className="absolute inset-0 bg-[#3a4c38]/0 transition-colors duration-500 group-hover:bg-[#3a4c38]/10" />
       </div>
@@ -48,14 +29,14 @@ export function HitCard({ p, onOpen }: { p: Product; onOpen: () => void }) {
 }
 
 /* Menu / related card with weight toggle */
-export function MenuCard({ p, onOpen, onAdd }: { p: Product; onOpen: () => void; onAdd: (id: string, opt: number) => void }) {
+export function MenuCard({ p, onOpen, onAdd }: { p: Product; onOpen: () => void; onAdd: (id: string, opt: string) => void }) {
   const [sel, setSel] = useState(0)
   const opt = p.opts[sel]
   const [added, setAdded] = useState(false)
   return (
     <article onClick={onOpen} className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-[round(calc(var(--u)*8),4px)] border border-[rgba(58,76,56,0.1)] bg-white transition-all duration-500 ease-out hover:-translate-y-1.5 hover:border-[rgba(58,76,56,0.25)] hover:shadow-[0_22px_40px_-24px_rgba(38,51,37,0.55)]">
       <div className="relative h-[round(calc(var(--u)*166),4px)] w-full overflow-hidden">
-        <img alt={p.name} src={p.img} className="size-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.08]" />
+        <img alt={p.name} src={sized(p.img, 640)} loading="lazy" className="size-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.08]" />
         {p.sale && <SaleBadge promo={p.sale} />}
       </div>
       <div className="flex flex-1 flex-col gap-[round(calc(var(--u)*16),4px)] p-[round(calc(var(--u)*16),4px)]">
@@ -96,7 +77,7 @@ export function MenuCard({ p, onOpen, onAdd }: { p: Product; onOpen: () => void;
             onClick={(e) => {
               e.stopPropagation()
               if (added) return
-              onAdd(p.id, sel)
+              onAdd(p.id, opt.key)
               setAdded(true)
               setTimeout(() => setAdded(false), 1200)
             }}

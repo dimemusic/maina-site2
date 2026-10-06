@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { PrimaryButton } from './Layout'
-import { P, promoDiscount } from './Products'
-import { normalizePhone } from '../data/catalog.js'
+import { sized, useContent } from '../lib/content'
+import { cartTotals, findOption, normalizePhone, promoDiscount, type Line } from '../lib/order-math.js'
 
-export type Line = { id: string; opt: number; qty: number }
+export type { Line }
 
 const F = "font-['Montserrat',sans-serif] wdth"
 const INPUT = `${F} w-full rounded-[round(calc(var(--u)*8),4px)] border border-[#e6e6e6] px-[round(calc(var(--u)*16),4px)] py-[round(calc(var(--u)*12),4px)] text-[length:round(calc(var(--u)*16),2px)] text-[#3a4c38] outline-none transition-colors placeholder:text-[#b7b7b7] focus:border-[#3a4c38]`
@@ -37,11 +37,10 @@ export default function Cart({
   const [errors, setErrors] = useState<Errors>({})
   const [sending, setSending] = useState(false)
   const [serverError, setServerError] = useState('')
-  const gross = lines.reduce((s, l) => s + P[l.id].opts[l.opt].price * l.qty, 0)
-  const saved = lines.reduce((s, l) => s + promoDiscount(P[l.id], l.opt, l.qty), 0)
-  const total = gross - saved
+  const { byId: P, site } = useContent()
+  const { saved, total } = cartTotals(lines, P)
   const count = lines.reduce((s, l) => s + l.qty, 0)
-  const FREE = 1500
+  const FREE = site.freeDeliveryFrom
 
   useEffect(() => {
     if (!open) return
@@ -194,13 +193,13 @@ export default function Cart({
             <ul className="flex-1 overflow-y-auto px-[round(calc(var(--u)*32),4px)]">
               {lines.map((l, i) => {
                 const p = P[l.id]
-                const o = p.opts[l.opt]
+                const o = findOption(p, l.opt)!
                 const off = promoDiscount(p, l.opt, l.qty)
                 const left = p.sale ? p.sale.every - (l.qty % p.sale.every) : 0
                 return (
                   <li key={`${l.id}-${l.opt}`} className="animate-fade flex gap-[round(calc(var(--u)*16),4px)] border-b border-[#f0f0f0] py-[round(calc(var(--u)*16),4px)]">
                     <button onClick={() => onOpenProduct(l.id)} className="group size-[round(calc(var(--u)*88),4px)] shrink-0 cursor-pointer overflow-hidden rounded-[round(calc(var(--u)*8),4px)]">
-                      <img alt={p.name} src={p.img} className="size-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                      <img alt={p.name} src={sized(p.img, 240)} className="size-full object-cover transition-transform duration-500 group-hover:scale-110" />
                     </button>
                     <div className="flex min-w-0 flex-1 flex-col">
                       <div className="flex items-start justify-between gap-[round(calc(var(--u)*8),4px)]">

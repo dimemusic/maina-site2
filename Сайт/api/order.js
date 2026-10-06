@@ -1,7 +1,53 @@
 // Vercel serverless function: POST /api/order
 // Приймає замовлення з сайту й надсилає його в Telegram через Bot API.
-// Токен і chat ID беруться ТІЛЬКИ зі змінних середовища (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID).
-import { CATALOG, FREE_DELIVERY, cartTotals, normalizePhone, promoDiscount, sanitizeLines } from '../src/data/catalog.js'
+// Сума рахується тут, за актуальними цінами з Sanity: з браузера приходять лише id товару, ключ варіанта й кількість.
+// Токени й ключі беруться ТІЛЬКИ зі змінних середовища:
+//   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, SANITY_PROJECT_ID, SANITY_DATASET (та необов'язковий SANITY_API_READ_TOKEN).
+import { cartTotals, findOption, normalizePhone, promoDiscount, sanitizeLines } from '../src/lib/order-math.js'
+
+const SANITY_API_VERSION = '2025-02-19'
+const MAX_LINES = 30
+
+// Беремо з Sanity лише ті товари, що є в кошику, і поріг безкоштовної доставки.
+// Запит іде напряму (api.sanity.io, не CDN), щоб ціни завжди були свіжими.
+const CATALOG_QUERY = `{
+  "products": *[_type == "product" && inStock != false && slug.current in $ids]{
+    "id": slug.current,
+    "name": title,
+    "opts": variants[]{ "key": _key, label, price, note },
+    "sale": select(sale.active == true => { "short": sale.badge, "text": sale.text, "every": sale.every, "off": sale.discountPercent / 100 })
+  },
+  "freeDelivery": *[_id == "siteSettings"][0].freeDeliveryFrom
+}`
+
+class CatalogError extends Error {}
+
+async function fetchCatalog(ids) {
+  const projectId = process.env.SANITY_PROJECT_ID
+  const dataset = process.env.SANITY_DATASET || 'production'
+  if (!projectId) throw new CatalogError('SANITY_PROJECT_ID не заданий у змінних середовища')
+  const headers = { 'Content-Type': 'application/json' }
+  // Токен потрібен лише якщо датасет приватний; для публічного можна не задавати
+  if (process.env.SANITY_API_READ_TOKEN) headers.Authorization = `Bearer ${process.env.SANITY_API_READ_TOKEN}`
+  let res
+  try {
+    res = await fetch(`https://${projectId}.api.sanity.io/v${SANITY_API_VERSION}/data/query/${dataset}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query: CATALOG_QUERY, params: { ids } }),
+      signal: AbortSignal.timeout(8000),
+    })
+  } catch (err) {
+    throw new CatalogError(`Sanity недоступний (${err instanceof Error ? err.name : 'unknown'})`)
+  }
+  // У лог потрапляє лише статус, без заголовків і токена
+  if (!res.ok) throw new CatalogError(`Sanity відповів ${res.status}`)
+  const { result } = await res.json()
+  return {
+    catalog: Object.fromEntries((result?.products ?? []).filter((p) => p.id && Array.isArray(p.opts)).map((p) => [p.id, p])),
+    freeDelivery: typeof result?.freeDelivery === 'number' ? result.freeDelivery : null,
+  }
+}
 
 // --- Простий rate limit: до 5 замовлень з одного IP за 10 хвилин ---
 // Пам'ять живе, поки живе інстанс функції, тож це захист «за найкращих зусиль»
@@ -27,11 +73,11 @@ const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 const money = (n) => `${Number.isInteger(n) ? n : n.toFixed(2)} ₴`
 const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 
-function buildMessage({ name, phone, address, comment, lines }) {
-  const { saved, total } = cartTotals(lines)
+function buildMessage({ name, phone, address, comment, lines, catalog, freeDelivery }) {
+  const { saved, total } = cartTotals(lines, catalog)
   const items = lines.map((l) => {
-    const p = CATALOG[l.id]
-    const o = p.opts[l.opt]
+    const p = catalog[l.id]
+    const o = findOption(p, l.opt)
     const off = promoDiscount(p, l.opt, l.qty)
     const promo = off > 0 ? ` (🎁 ${escapeHtml(p.sale.short)}: −${money(off)})` : ''
     return `• ${escapeHtml(p.name)}, ${escapeHtml(o.label)} × ${l.qty} = ${money(o.price * l.qty - off)}${promo}`
@@ -47,7 +93,7 @@ function buildMessage({ name, phone, address, comment, lines }) {
     '',
     ...(saved > 0 ? [`Знижка за акціями: −${money(saved)}`] : []),
     `<b>Разом: ${money(total)}</b>`,
-    `Доставка: ${total >= FREE_DELIVERY ? 'безкоштовна' : 'за тарифами перевізника'}`,
+    `Доставка: ${freeDelivery !== null && total >= freeDelivery ? 'безкоштовна' : 'за тарифами перевізника'}`,
     ...(comment ? ['', `💬 ${escapeHtml(comment)}`] : []),
   ].join('\n')
 }
@@ -78,12 +124,31 @@ export default async function handler(req, res) {
   const address = text(body.address, 200)
   const comment = text(body.comment, 500)
   const phone = normalizePhone(body.phone)
-  const lines = sanitizeLines(body.lines)
 
   if (name.length < 2) return res.status(400).json({ error: 'Вкажіть ім’я.' })
   if (!phone) return res.status(400).json({ error: 'Некоректний номер телефону.' })
   if (address.length < 5) return res.status(400).json({ error: 'Вкажіть місто та відділення Нової пошти.' })
-  if (lines.length === 0) return res.status(400).json({ error: 'Кошик порожній або товарів більше немає в наявності.' })
+
+  const rawLines = body.lines
+  if (!Array.isArray(rawLines) || rawLines.length === 0) return res.status(400).json({ error: 'Кошик порожній.' })
+  if (rawLines.length > MAX_LINES) return res.status(400).json({ error: 'Забагато позицій у кошику.' })
+  const ids = [...new Set(rawLines.map((l) => l?.id).filter((id) => typeof id === 'string' && id.length > 0 && id.length <= 100))]
+
+  // Ціни, назви й акції беремо ТІЛЬКИ з Sanity. Усе, що прийшло з браузера, крім id/варіанта/кількості, ігнорується.
+  let catalog
+  let freeDelivery
+  try {
+    ;({ catalog, freeDelivery } = await fetchCatalog(ids))
+  } catch (err) {
+    console.error('Не вдалося отримати каталог із Sanity:', err instanceof CatalogError ? err.message : 'unknown')
+    return res.status(503).json({ error: 'Не вдалося перевірити ціни. Спробуйте ще раз за хвилину або зателефонуйте нам.' })
+  }
+  const lines = sanitizeLines(rawLines, catalog)
+  // Якщо хоч одна позиція зникла чи змінилась (товар прибрали, змінили варіанти), не надсилаємо замовлення
+  // з іншою сумою, ніж бачив покупець: просимо оновити сторінку й перевірити кошик.
+  if (lines.length !== rawLines.length) {
+    return res.status(409).json({ error: 'Деякі товари в кошику змінилися або більше недоступні. Оновіть сторінку й перевірте кошик.' })
+  }
 
   const token = process.env.TELEGRAM_BOT_TOKEN
   const chatId = process.env.TELEGRAM_CHAT_ID
@@ -96,7 +161,7 @@ export default async function handler(req, res) {
     const tg = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: buildMessage({ name, phone, address, comment, lines }), parse_mode: 'HTML' }),
+      body: JSON.stringify({ chat_id: chatId, text: buildMessage({ name, phone, address, comment, lines, catalog, freeDelivery }), parse_mode: 'HTML' }),
     })
     if (!tg.ok) {
       // У лог пишемо лише статус і опис помилки від Telegram — без токена

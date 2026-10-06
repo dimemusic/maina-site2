@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { A, Wave } from '../components/Layout'
-import { MenuCard, P } from '../components/Products'
+import { MenuCard } from '../components/Products'
+import { useContent, type Product } from '../lib/content'
 
 const SORTS = ['За замовчуванням', 'За зростанням ціни', 'За зниженням ціни']
 
@@ -16,26 +17,35 @@ const SortIcon = ({ i }: { i: number }) => (
   </svg>
 )
 
-const CATS: { label: string; icon: string; font: string; inset?: boolean; ids?: string[] }[] = [
-  { label: 'Усе меню', icon: '9bfa7.svg', font: "font-['Montserrat',sans-serif] font-semibold" },
-  { label: 'Акції', icon: '9a0b8.svg', font: "font-['Montserrat',sans-serif] font-semibold", ids: ['kovbasa', 'syr'] },
-  { label: 'Новинки', icon: '17f6c.svg', font: "font-['Montserrat',sans-serif] font-semibold", ids: ['khinkaliCheese', 'vyshnya', 'cinnabon'] },
-  { label: 'Хліб', icon: 'c3098.svg', font: "font-['Montserrat',sans-serif] font-medium", inset: true, ids: ['khlib'] },
-  { label: 'Солодка випічка', icon: 'd23ac.svg', font: "font-['Montserrat',sans-serif] font-medium", ids: ['cinnabon', 'syrnyky', 'strudel'] },
-  { label: 'Вареники', icon: '28e8b.svg', font: "font-['Montserrat',sans-serif] font-medium", ids: ['varenyky', 'vyshnya'] },
-  { label: 'Пельмені та хінкалі', icon: 'fa09a.svg', font: "font-['Montserrat',sans-serif] font-medium", ids: ['pelmeni', 'khinkaliCheese', 'khinkaliMeat'] },
-  { label: 'Ковбаси', icon: 'd4540.svg', font: "font-['Montserrat',sans-serif] font-medium", ids: ['kovbasa'] },
-  { label: 'Крафтові сири', icon: 'cad78.svg', font: "font-['Montserrat',sans-serif] font-medium", ids: ['syr'] },
-]
-const ALL = ['varenyky', 'khlib', 'khinkaliCheese', 'pelmeni', 'vyshnya', 'syr', 'khinkaliMeat', 'kovbasa', 'cinnabon', 'syrnyky', 'strudel']
+type Cat = { label: string; icon: string; font: string; inset?: boolean; match: (p: Product) => boolean }
+const SEMI = "font-['Montserrat',sans-serif] font-semibold"
+const MEDIUM = "font-['Montserrat',sans-serif] font-medium"
 
-export default function Menu({ openProduct, onAdd }: { openProduct: (id: string) => void; onAdd: (id: string, opt: number) => void }) {
+// Список категорій приходить із Sanity; іконки (частина дизайну) підбираємо за slug категорії
+const CAT_ICONS: Record<string, { icon: string; inset?: boolean }> = {
+  khlib: { icon: 'c3098.svg', inset: true },
+  sweet: { icon: 'd23ac.svg' },
+  varenyky: { icon: '28e8b.svg' },
+  'pelmeni-khinkali': { icon: 'fa09a.svg' },
+  kovbasy: { icon: 'd4540.svg' },
+  syry: { icon: 'cad78.svg' },
+}
+
+export default function Menu({ openProduct, onAdd }: { openProduct: (id: string) => void; onAdd: (id: string, opt: string) => void }) {
+  const { products, categories } = useContent()
+  const CATS: Cat[] = [
+    { label: 'Усе меню', icon: '9bfa7.svg', font: SEMI, match: () => true },
+    { label: 'Акції', icon: '9a0b8.svg', font: SEMI, match: (p) => !!p.sale },
+    { label: 'Новинки', icon: '17f6c.svg', font: SEMI, match: (p) => p.isNew },
+    ...categories.map((c) => ({ label: c.title, icon: CAT_ICONS[c.slug]?.icon ?? '9bfa7.svg', inset: CAT_ICONS[c.slug]?.inset, font: MEDIUM, match: (p: Product) => p.catSlug === c.slug })),
+  ]
   const [cat, setCat] = useState(0)
   const [sortOpen, setSortOpen] = useState(false)
   const [sort, setSort] = useState(0)
-  const base = CATS[cat].ids ?? ALL
-  const price = (id: string) => P[id].opts[0].price
-  const ids = sort === 0 ? base : [...base].sort((a, b) => (sort === 1 ? price(a) - price(b) : price(b) - price(a)))
+  const current = CATS[cat] ?? CATS[0]
+  const base = products.filter(current.match)
+  const price = (p: Product) => p.opts[0].price
+  const list = sort === 0 ? base : [...base].sort((a, b) => (sort === 1 ? price(a) - price(b) : price(b) - price(a)))
 
   return (
     <main className="pb-[round(calc(var(--u)*24),4px)]">
@@ -111,12 +121,12 @@ export default function Menu({ openProduct, onAdd }: { openProduct: (id: string)
           </aside>
 
           <div className="grid flex-1 grid-cols-1 content-start items-start gap-[round(calc(var(--u)*24),4px)] sm:grid-cols-2 lg:grid-cols-3">
-            {ids.map((id, i) => (
-              <div key={`${cat}-${sort}-${id}`} className="animate-page" style={{ animationDelay: `${i * 60}ms` }}>
-                <MenuCard p={P[id]} onOpen={() => openProduct(id)} onAdd={onAdd} />
+            {list.map((p, i) => (
+              <div key={`${cat}-${sort}-${p.id}`} className="animate-page" style={{ animationDelay: `${i * 60}ms` }}>
+                <MenuCard p={p} onOpen={() => openProduct(p.id)} onAdd={onAdd} />
               </div>
             ))}
-            {ids.length === 0 && (
+            {list.length === 0 && (
               <p className="animate-page font-['Montserrat',sans-serif] wdth col-span-full py-[round(calc(var(--u)*64),4px)] text-center text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] text-[#929292]">
                 Скоро тут з’являться нові позиції
               </p>
