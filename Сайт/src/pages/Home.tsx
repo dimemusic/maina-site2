@@ -18,7 +18,8 @@ export default function Home({ go, openProduct }: { go: (p: Page) => void; openP
   return (
     <main>
       {/* Hero */}
-      <section className="group/hero relative isolate overflow-hidden">
+      {/* md:pb + md:-mb: нижній відступ дає місце тіні фото (її не різала б секція з overflow-hidden), а від’ємний margin лишає наступний блок на тому ж місці */}
+      <section className="group/hero relative isolate overflow-hidden md:-mb-[round(calc(var(--u)*48),4px)] md:pb-[round(calc(var(--u)*48),4px)]">
         <img alt="Магазин Maina by Rivka" src={heroImg} className="animate-page absolute inset-0 -z-20 size-full object-cover transition-transform duration-[2.4s] ease-out group-hover/hero:scale-[1.03] md:hidden" />
         <div aria-hidden className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(28,38,27,0.75)_0%,rgba(28,38,27,0.88)_100%)] md:hidden" />
         <div className="mx-auto max-w-[round(calc(var(--u)*1200),4px)] px-6 max-md:flex max-md:min-h-[calc(100svh-64px)] max-md:flex-col max-md:justify-center max-md:pt-10 max-md:pb-16 md:grid md:gap-12 md:pt-[round(calc(var(--u)*64),4px)] lg:grid-cols-2 lg:gap-[round(calc(var(--u)*24),4px)] xl:px-0">
