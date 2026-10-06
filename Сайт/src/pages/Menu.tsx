@@ -188,8 +188,8 @@ export default function Menu({ openProduct, onAdd }: { openProduct: (id: string)
 
         <div className="mt-[round(calc(var(--u)*24),4px)] flex flex-col gap-[round(calc(var(--u)*24),4px)] lg:mt-[round(calc(var(--u)*32),4px)] lg:flex-row">
           {/* Від 1024px: липка бічна панель (пошук + категорії). На менших екранах тут лишається лише картка внизу, під товарами */}
-          {/* Внутрішні відступи (12 з боків, 4 зверху, 20 знизу) дають місце тіні активної категорії, а від’ємні margin повертають розташування на місце: контент лишається шириною 242px */}
-          <aside className="order-last flex w-full shrink-0 flex-col [scrollbar-width:thin] lg:sticky lg:top-[calc(var(--sticky-top)+12px)] lg:order-none lg:-mx-3 lg:-mt-1 lg:-mb-5 lg:max-h-[calc(100vh-var(--sticky-top)-8px)] lg:w-[calc(var(--u)*266)] lg:self-start lg:overflow-y-auto lg:px-3 lg:pt-1 lg:pb-5">
+          {/* Внутрішні відступи (20 з боків, 12 зверху, 28 знизу) дають місце тіні активної категорії, а від’ємні margin повертають розташування на місце: контент лишається шириною 242px і стоїть там само, де стояв */}
+          <aside className="order-last flex w-full shrink-0 flex-col [scrollbar-width:thin] lg:sticky lg:top-[calc(var(--sticky-top)+4px)] lg:order-none lg:-mx-5 lg:-mt-3 lg:-mb-7 lg:max-h-[calc(100vh-var(--sticky-top)+8px)] lg:w-[calc(var(--u)*282)] lg:self-start lg:overflow-y-auto lg:px-5 lg:pt-3 lg:pb-7">
             <div className="hidden lg:block">
               <SearchField id="menu-search-desktop" value={query} onChange={setQuery} />
               <p className="font-['Montserrat',sans-serif] wdth mt-[round(calc(var(--u)*24),4px)] text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*16),4px)] font-normal tracking-[calc(var(--u)*2)] text-[#81857e] uppercase">Категорії</p>
