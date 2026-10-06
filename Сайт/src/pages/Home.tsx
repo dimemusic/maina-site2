@@ -104,7 +104,7 @@ export default function Home({ go, openProduct }: { go: (p: Page) => void; openP
       </section>
 
       {/* Delivery */}
-      <section className="mt-[round(calc(var(--u)*40),4px)] bg-[#3a4c38] px-6 pt-[round(calc(var(--u)*32),4px)] pb-[round(calc(var(--u)*56),4px)] xl:px-0 lg:pb-[round(calc(var(--u)*112),4px)]">
+      <section id="delivery" className="mt-[round(calc(var(--u)*40),4px)] bg-[#3a4c38] px-6 pt-[round(calc(var(--u)*32),4px)] pb-[round(calc(var(--u)*56),4px)] xl:px-0 lg:pb-[round(calc(var(--u)*112),4px)]">
         <div className="relative mx-auto max-w-[round(calc(var(--u)*1200),4px)]">
           <h2 className="reveal font-evo-bold text-[length:round(calc(var(--u)*40),2px)] leading-[round(calc(var(--u)*48),4px)] text-white">{home.deliveryTitle}</h2>
           

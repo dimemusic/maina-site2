@@ -33,7 +33,37 @@ function scrollToContacts(go?: (p: Page) => void) {
   window.scrollTo({ top: prev.getBoundingClientRect().bottom + window.scrollY - header, behavior: 'smooth' })
 }
 
-const NAV = ['Асортимент', 'Про нас', 'Замовлення', 'Контакти']
+// Прокручує до зеленого блоку «Як відбувається доставка?» на головній. Якщо ми на іншій сторінці,
+// спершу переходимо на головну й чекаємо, поки блок з’явиться. Врахована висота липкої шапки.
+function scrollToDelivery(go?: (p: Page) => void) {
+  const section = document.getElementById('delivery')
+  if (!section) {
+    if (!go) return
+    go('home')
+    let tries = 0
+    const wait = () => (document.getElementById('delivery') ? scrollToDelivery() : ++tries < 30 && requestAnimationFrame(wait))
+    return void requestAnimationFrame(wait)
+  }
+  const header = document.querySelector('header')?.getBoundingClientRect().height ?? 0
+  // Позиція блоку від верху документа через offsetTop (без впливу анімації появи сторінки, що ледь зсуває вміст)
+  let top = 0
+  for (let el: HTMLElement | null = section; el; el = el.offsetParent as HTMLElement | null) top += el.offsetTop
+  window.scrollTo({ top: Math.max(0, top - header), behavior: 'smooth' })
+}
+
+// Пункти меню прив’язані до id, а не до номера, тож порядок чи кількість пунктів можна змінювати безпечно
+type NavId = 'menu' | 'delivery' | 'contacts'
+const NAV: { id: NavId; label: string }[] = [
+  { id: 'menu', label: 'Асортимент' },
+  { id: 'delivery', label: 'Доставка' },
+  { id: 'contacts', label: 'Контакти' },
+]
+
+function goNav(id: NavId, go: (p: Page) => void) {
+  if (id === 'menu') go('menu')
+  else if (id === 'delivery') scrollToDelivery(go)
+  else scrollToContacts(go)
+}
 
 // Іконки соцмереж лишаються в дизайні, а самі посилання беруться з налаштувань у Sanity
 const SOCIAL_ICONS = {
@@ -53,10 +83,11 @@ function MobileMenu({ open, close, go, cart, onCart }: { open: boolean; close: (
     document.body.style.overflow = open ? 'hidden' : ''
     return () => void (document.body.style.overflow = '')
   }, [open])
-  const pick = (i: number) => {
+  const pick = (id: NavId) => {
     close()
-    if (i === 3) setTimeout(() => scrollToContacts(go), 50)
-    else go(i === 0 ? 'menu' : 'home')
+    // Відкрите меню блокує прокрутку сторінки, тому до блоків прокручуємо трохи згодом, коли воно вже закрилось
+    if (id === 'menu') go('menu')
+    else setTimeout(() => goNav(id, go), 50)
   }
   return (
     <div className={`fixed inset-0 z-50 flex flex-col bg-[#faf6ec] transition-all duration-400 ease-out md:hidden ${open ? 'visible opacity-100' : 'invisible -translate-y-3 opacity-0'}`} aria-hidden={!open}>
@@ -76,12 +107,12 @@ function MobileMenu({ open, close, go, cart, onCart }: { open: boolean; close: (
       <nav className="flex flex-col gap-2 px-8 pt-12">
         {NAV.map((n, i) => (
           <button
-            key={n}
-            onClick={() => pick(i)}
+            key={n.id}
+            onClick={() => pick(n.id)}
             style={{ transitionDelay: open ? `${80 + i * 60}ms` : '0ms' }}
             className={`font-evo w-fit cursor-pointer py-1 text-left text-[32px] leading-[40px] tracking-[-0.5px] text-[#3a4c38] transition-all duration-500 ease-out active:text-[#b05a3f] ${open ? 'translate-x-0 opacity-100' : '-translate-x-4 opacity-0'}`}
           >
-            {n}
+            {n.label}
           </button>
         ))}
       </nav>
@@ -116,14 +147,14 @@ export function Header({ go, cart, bump, onCart }: { go: (p: Page) => void; cart
             <Monogram onClick={() => go('home')} />
           </div>
           <nav className="hidden items-center gap-[round(calc(var(--u)*64),4px)] md:flex">
-            {NAV.map((n, i) => (
+            {NAV.map((n) => (
               <button
-                key={n}
-                onClick={() => (i === 3 ? scrollToContacts(go) : go(i === 0 ? 'menu' : 'home'))}
+                key={n.id}
+                onClick={() => goNav(n.id, go)}
                 className="group relative flex cursor-pointer items-center justify-center py-[round(calc(var(--u)*8),4px)]"
               >
                 <span className="font-['Montserrat',sans-serif] wdth text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*24),4px)] font-normal text-[#4c5147] transition-colors duration-300 group-hover:text-[#3a4c38]">
-                  {n}
+                  {n.label}
                 </span>
                 <span className="absolute top-[round(calc(var(--u)*29),4px)] left-0 h-px w-0 bg-[#b0563a] transition-[width] duration-300 ease-out group-hover:w-full" />
               </button>
