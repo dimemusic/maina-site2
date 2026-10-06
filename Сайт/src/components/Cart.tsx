@@ -1,10 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { PrimaryButton } from './Layout'
 import { P, promoDiscount } from './Products'
+import { normalizePhone } from '../data/catalog.js'
 
 export type Line = { id: string; opt: number; qty: number }
 
 const F = "font-['Montserrat',sans-serif] wdth"
+const INPUT = `${F} w-full rounded-[round(calc(var(--u)*8),4px)] border border-[#e6e6e6] px-[round(calc(var(--u)*16),4px)] py-[round(calc(var(--u)*12),4px)] text-[length:round(calc(var(--u)*16),2px)] text-[#3a4c38] outline-none transition-colors placeholder:text-[#b7b7b7] focus:border-[#3a4c38]`
+const LABEL = `${F} mb-[calc(var(--u)*4)] block text-[length:round(calc(var(--u)*14),2px)] font-medium text-[#4c5147]`
+const ERR = `${F} mt-[calc(var(--u)*4)] text-[length:round(calc(var(--u)*13),2px)] text-[#963c3c]`
+
+type Step = 'cart' | 'checkout' | 'done'
+type Errors = { name?: string; phone?: string; address?: string }
 
 export default function Cart({
   open,
@@ -21,7 +28,15 @@ export default function Cart({
   onOpenProduct: (id: string) => void
   onClear: () => void
 }) {
-  const [done, setDone] = useState(false)
+  const [step, setStep] = useState<Step>('cart')
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
+  const [comment, setComment] = useState('')
+  const [website, setWebsite] = useState('') // honeypot: люди його не бачать, боти заповнюють
+  const [errors, setErrors] = useState<Errors>({})
+  const [sending, setSending] = useState(false)
+  const [serverError, setServerError] = useState('')
   const gross = lines.reduce((s, l) => s + P[l.id].opts[l.opt].price * l.qty, 0)
   const saved = lines.reduce((s, l) => s + promoDiscount(P[l.id], l.opt, l.qty), 0)
   const total = gross - saved
@@ -40,8 +55,46 @@ export default function Cart({
   }, [open, onClose])
 
   useEffect(() => {
-    if (!open) setDone(false)
+    if (!open) setStep((s) => (s === 'done' ? 'cart' : s))
   }, [open])
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (sending || lines.length === 0) return
+    const normalized = normalizePhone(phone)
+    const errs: Errors = {}
+    if (name.trim().length < 2) errs.name = 'Вкажіть ім’я'
+    if (!normalized) errs.phone = 'Введіть номер у форматі +380 50 123 45 67 або 050 123 45 67'
+    if (address.trim().length < 5) errs.address = 'Вкажіть місто та відділення Нової пошти'
+    setErrors(errs)
+    if (Object.keys(errs).length > 0) return
+
+    setSending(true)
+    setServerError('')
+    try {
+      const res = await fetch('/api/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), phone: normalized, address: address.trim(), comment: comment.trim(), website, lines }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || 'Не вдалося надіслати замовлення. Спробуйте ще раз.')
+      }
+      // Очищаємо кошик лише після успішної відповіді сервера
+      onClear()
+      setName('')
+      setPhone('')
+      setAddress('')
+      setComment('')
+      setStep('done')
+    } catch (err) {
+      const offline = err instanceof TypeError // fetch кидає TypeError, коли немає зв’язку
+      setServerError(offline ? 'Немає зв’язку із сервером. Перевірте інтернет і спробуйте ще раз — кошик збережено.' : (err as Error).message)
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`} aria-hidden={!open}>
@@ -61,7 +114,7 @@ export default function Cart({
           </button>
         </header>
 
-        {done ? (
+        {step === 'done' ? (
           <div className="animate-fade flex flex-1 flex-col items-center justify-center gap-[round(calc(var(--u)*16),4px)] px-[round(calc(var(--u)*32),4px)] text-center">
             <div className="flex size-[round(calc(var(--u)*72),4px)] items-center justify-center rounded-full bg-[#3a4c38] text-white">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
@@ -76,6 +129,57 @@ export default function Cart({
             <p className={`${F} text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] text-[#929292]`}>Додайте щось смачне з нашого меню</p>
             <PrimaryButton className="mt-[round(calc(var(--u)*8),4px)] max-w-[round(calc(var(--u)*240),4px)]" onClick={onClose}>До меню</PrimaryButton>
           </div>
+        ) : step === 'checkout' ? (
+          <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 overflow-y-auto px-[round(calc(var(--u)*32),4px)] py-[round(calc(var(--u)*16),4px)]">
+              <button type="button" onClick={() => setStep('cart')} className={`${F} mb-[round(calc(var(--u)*16),4px)] cursor-pointer text-[length:round(calc(var(--u)*14),2px)] text-[#929292] hover:text-[#3a4c38]`}>
+                ← Назад до кошика
+              </button>
+              <h3 className="font-evo-bold mb-[round(calc(var(--u)*16),4px)] text-[length:round(calc(var(--u)*20),2px)] text-[#3a4c38]">Контактні дані</h3>
+              <div className="flex flex-col gap-[round(calc(var(--u)*16),4px)]">
+                <div>
+                  <label htmlFor="o-name" className={LABEL}>Ім’я *</label>
+                  <input id="o-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} autoComplete="name" placeholder="Олена" className={INPUT} />
+                  {errors.name && <p className={ERR}>{errors.name}</p>}
+                </div>
+                <div>
+                  <label htmlFor="o-phone" className={LABEL}>Телефон *</label>
+                  <input id="o-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={25} autoComplete="tel" placeholder="+380 50 123 45 67" className={INPUT} />
+                  {errors.phone && <p className={ERR}>{errors.phone}</p>}
+                </div>
+                <div>
+                  <label htmlFor="o-address" className={LABEL}>Місто та відділення Нової пошти *</label>
+                  <input id="o-address" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} placeholder="Київ, відділення №12" className={INPUT} />
+                  {errors.address && <p className={ERR}>{errors.address}</p>}
+                </div>
+                <div>
+                  <label htmlFor="o-comment" className={LABEL}>Коментар</label>
+                  <textarea id="o-comment" value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} rows={3} placeholder="Побажання до замовлення (необов’язково)" className={`${INPUT} resize-none`} />
+                </div>
+                {/* Honeypot: невидиме для людей поле-пастка проти ботів */}
+                <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
+                  <label>
+                    Не заповнюйте це поле
+                    <input type="text" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
+                  </label>
+                </div>
+              </div>
+            </div>
+            <footer className="flex flex-col gap-[round(calc(var(--u)*16),4px)] border-t border-[#e9e9e9] px-[round(calc(var(--u)*32),4px)] py-[round(calc(var(--u)*24),4px)]">
+              <div className="flex items-baseline justify-between">
+                <span className="font-evo-bold text-[length:round(calc(var(--u)*20),2px)] text-[#3a4c38]">Разом</span>
+                <span className={`${F} text-[length:round(calc(var(--u)*28),2px)] font-semibold text-[#b05a3f]`}>{total} ₴</span>
+              </div>
+              {serverError && (
+                <p role="alert" className={`${F} rounded-[round(calc(var(--u)*8),4px)] border border-[#b05a3f] bg-[#b05a3f]/8 px-[round(calc(var(--u)*12),4px)] py-[round(calc(var(--u)*8),4px)] text-[length:round(calc(var(--u)*14),2px)] text-[#963c3c]`}>
+                  {serverError}
+                </p>
+              )}
+              <PrimaryButton type="submit" disabled={sending} className="max-w-none">
+                {sending ? 'Надсилаємо…' : 'Підтвердити замовлення'}
+              </PrimaryButton>
+            </footer>
+          </form>
         ) : (
           <>
             <div className="border-b border-[#e9e9e9] px-[round(calc(var(--u)*32),4px)] py-[round(calc(var(--u)*16),4px)]">
@@ -160,8 +264,8 @@ export default function Cart({
               <PrimaryButton
                 className="max-w-none"
                 onClick={() => {
-                  setDone(true)
-                  onClear()
+                  setServerError('')
+                  setStep('checkout')
                 }}
               >
                 Оформити замовлення

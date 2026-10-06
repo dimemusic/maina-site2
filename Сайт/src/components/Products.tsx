@@ -1,31 +1,27 @@
 import { useState } from 'react'
 import { A } from './Layout'
+import { CATALOG, promoDiscount, type CatalogItem, type Option, type Promo } from '../data/catalog.js'
 
-export type Option = { label: string; price: number; note: string }
-export type Product = { id: string; name: string; desc: string; img: string; opts: Option[]; sale?: Promo }
-export type Promo = { short: string; text: string; every: number; off: number }
+export { promoDiscount }
+export type { Option, Promo }
+export type Product = CatalogItem & { img: string }
 
-// every Nth unit of the same pack gets `off` (0–1) discount
-export const promoDiscount = (p: Product, opt: number, qty: number) => (p.sale ? Math.floor(qty / p.sale.every) * p.opts[opt].price * p.sale.off : 0)
-
-const kg = (half: number, full: number): Option[] => [
-  { label: '0.5 кг', price: half, note: 'за 500 г' },
-  { label: '1 кг', price: full, note: 'за 1 кг' },
-]
-
-export const P: Record<string, Product> = {
-  varenyky: { id: 'varenyky', name: 'Вареники з картоплею та грибами', desc: 'Ніжне тісто, картопля й обсмажені печериці — ліплені вручну, як удома.', img: `${A}/b8623.png`, opts: kg(145, 280) },
-  kovbasa: { id: 'kovbasa', name: 'Сиров’ялена ковбаса', desc: 'Витримана й ароматна: добірне м’ясо, натуральні спеції та жодних консервантів.', img: `${A}/40cdf.png`, opts: [{ label: '250 г', price: 215, note: 'за 250 г' }, { label: '500 г', price: 410, note: 'за 500 г' }], sale: { short: '2 + 1', text: 'Беріть 2 — третя в подарунок', every: 3, off: 1 } },
-  khinkaliMeat: { id: 'khinkaliMeat', name: 'Хінкалі з м’ясом', desc: 'Соковита яловичина, запашна зелень і м’яке тісто — ситно та по-домашньому.', img: `${A}/e8c65.png`, opts: kg(185, 355) },
-  vyshnya: { id: 'vyshnya', name: 'Вареники з вишнею', desc: 'Тонке тісто, стигла вишня та трішки цукру — яскравий смак у кожному варенику.', img: `${A}/9f603.png`, opts: kg(155, 295) },
-  khlib: { id: 'khlib', name: 'Домашній хліб', desc: 'Рум’яна скоринка, пухкий м’якуш і аромат закваски — випікаємо невеликими партіями.', img: `${A}/1835a.png`, opts: [{ label: '1 шт', price: 85, note: 'за 1 шт' }, { label: '2 шт', price: 160, note: 'за 2 шт' }] },
-  khinkaliCheese: { id: 'khinkaliCheese', name: 'Хінкалі з сиром', desc: 'Тягучий сулугуні та бринза в ніжному тісті — вершкова начинка з легкою солонуватістю.', img: `${A}/50585.png`, opts: kg(175, 335) },
-  pelmeni: { id: 'pelmeni', name: 'Пельмені з м’ясом', desc: 'Соковита яловичина й свинина, цибуля та делікатні спеції — просто й дуже смачно.', img: `${A}/1bf7b.png`, opts: kg(169, 320) },
-  syr: { id: 'syr', name: 'Крафтовий сир', desc: 'Добірне молоко, витримка й ніжний вершковий післясмак — для сніданків і винних вечорів.', img: `${A}/9e5d6.png`, opts: [{ label: '200 г', price: 195, note: 'за 200 г' }, { label: '400 г', price: 370, note: 'за 400 г' }], sale: { short: '−50%', text: 'Другий сир за пів ціни', every: 2, off: 0.5 } },
-  cinnabon: { id: 'cinnabon', name: 'Булочки з корицею', desc: 'Пухке здобне тісто, щедра кориця та вершковий крем, що тане в кожному завитку.', img: 'https://images.unsplash.com/photo-1694632288834-17d86b340745?auto=format&fit=crop&w=1080&q=80', opts: [{ label: '1 шт', price: 65, note: 'за 1 шт' }, { label: '4 шт', price: 240, note: 'за 4 шт' }] },
-  syrnyky: { id: 'syrnyky', name: 'Сирники домашні', desc: 'Ніжний фермерський сир, ваніль і золотиста скоринка — ідеальні до ранкової кави.', img: 'https://images.unsplash.com/photo-1681760161787-858b651df036?auto=format&fit=crop&w=1080&q=80', opts: [{ label: '0.5 кг', price: 210, note: 'за 500 г' }, { label: '1 кг', price: 399, note: 'за 1 кг' }] },
-  strudel: { id: 'strudel', name: 'Яблучний штрудель', desc: 'Тонке хрустке тісто, соковиті яблука, родзинки та кориця — класика для затишного чаювання.', img: 'https://images.unsplash.com/photo-1657313938000-23c4322dbe22?auto=format&fit=crop&w=1080&q=80', opts: [{ label: '1 шт', price: 245, note: 'за 1 шт' }, { label: '2 шт', price: 470, note: 'за 2 шт' }] },
+// Names, prices and promos live in src/data/catalog.js (shared with api/order.js); only images are added here.
+const IMG: Record<string, string> = {
+  varenyky: `${A}/b8623.png`,
+  kovbasa: `${A}/40cdf.png`,
+  khinkaliMeat: `${A}/e8c65.png`,
+  vyshnya: `${A}/9f603.png`,
+  khlib: `${A}/1835a.png`,
+  khinkaliCheese: `${A}/50585.png`,
+  pelmeni: `${A}/1bf7b.png`,
+  syr: `${A}/9e5d6.png`,
+  cinnabon: 'https://images.unsplash.com/photo-1694632288834-17d86b340745?auto=format&fit=crop&w=1080&q=80',
+  syrnyky: 'https://images.unsplash.com/photo-1681760161787-858b651df036?auto=format&fit=crop&w=1080&q=80',
+  strudel: 'https://images.unsplash.com/photo-1657313938000-23c4322dbe22?auto=format&fit=crop&w=1080&q=80',
 }
+
+export const P: Record<string, Product> = Object.fromEntries(Object.entries(CATALOG).map(([id, p]) => [id, { ...p, img: IMG[id] ?? '' }]))
 
 /* Home "Хіти продажів" card */
 export function HitCard({ p, onOpen }: { p: Product; onOpen: () => void }) {

@@ -4,12 +4,14 @@ import Home from './pages/Home'
 import Menu from './pages/Menu'
 import Product from './pages/Product'
 import Cart, { type Line } from './components/Cart'
+import { sanitizeLines } from './data/catalog.js'
 
 export default function App() {
   const [page, setPage] = useState<Page>('home')
   const [lines, setLines] = useState<Line[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('cart') ?? '[]')
+      // Товари, яких більше немає в каталозі, відкидаємо, щоб сайт не ламався
+      return sanitizeLines(JSON.parse(localStorage.getItem('cart') ?? '[]'))
     } catch {
       return []
     }
