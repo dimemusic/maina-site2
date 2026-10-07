@@ -29,6 +29,27 @@ export const product = defineType({
       validation: (rule) => rule.required(),
     }),
     defineField({
+      name: 'sku',
+      title: 'Артикул',
+      description:
+        'Формат MB-001: літери MB, дефіс і щонайменше три цифри. У кожного товару свій артикул, повторювати його не можна. Покупці його не бачать, він потрапляє у повідомлення про замовлення.',
+      type: 'string',
+      group: 'main',
+      validation: (rule) =>
+        rule.required().custom(async (value, context) => {
+          if (!value) return true // «обов’язкове» вже перевіряє required()
+          if (!/^MB-\d{3,}$/.test(value)) return 'Формат артикула: MB-001 (MB, дефіс і щонайменше три цифри)'
+          const id = (context.document?._id ?? '').replace(/^drafts\./, '')
+          const taken = await context
+            .getClient({apiVersion: '2025-02-19'})
+            .fetch<number>(
+              'count(*[_type == "product" && sku == $sku && !(_id in [$id, "drafts." + $id])])',
+              {sku: value, id},
+            )
+          return taken > 0 ? 'Такий артикул уже є в іншому товарі' : true
+        }),
+    }),
+    defineField({
       name: 'category',
       title: 'Категорія',
       type: 'reference',
@@ -282,6 +303,11 @@ export const product = defineType({
     {title: 'Порядок у меню', name: 'orderAsc', by: [{field: 'order', direction: 'asc'}]},
   ],
   preview: {
-    select: {title: 'title', subtitle: 'category.title', media: 'image'},
+    select: {title: 'title', sku: 'sku', category: 'category.title', media: 'image'},
+    prepare: ({title, sku, category, media}) => ({
+      title,
+      subtitle: [sku, category].filter(Boolean).join(' · '),
+      media,
+    }),
   },
 })

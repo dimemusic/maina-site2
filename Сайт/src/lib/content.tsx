@@ -19,6 +19,7 @@ export type Details = {
   related: string[]
 }
 export type Product = CatalogItem & {
+  sku: string
   desc: string
   img: string
   gallery: string[]
@@ -71,6 +72,7 @@ const QUERY = `{
   "products": *[_type == "product" && inStock != false] | order(order asc, title asc) {
     "id": slug.current,
     "name": title,
+    sku,
     "desc": description,
     "img": image.asset->url,
     "gallery": gallery[].asset->url,
@@ -115,6 +117,7 @@ function normalize(raw: any): Content {
       return {
         id: p.id,
         name: str(p.name),
+        sku: str(p.sku),
         desc: str(p.desc),
         img: str(p.img),
         gallery: strs(p.gallery),

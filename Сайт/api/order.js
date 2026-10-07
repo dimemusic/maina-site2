@@ -14,6 +14,7 @@ const CATALOG_QUERY = `{
   "products": *[_type == "product" && inStock != false && slug.current in $ids]{
     "id": slug.current,
     "name": title,
+    sku,
     "opts": variants[]{ "key": _key, label, price, note },
     "sale": select(sale.active == true => { "short": sale.badge, "text": sale.text, "every": sale.every, "off": sale.discountPercent / 100 })
   },
@@ -80,7 +81,8 @@ function buildMessage({ name, phone, address, comment, lines, catalog, freeDeliv
     const o = findOption(p, l.opt)
     const off = promoDiscount(p, l.opt, l.qty)
     const promo = off > 0 ? ` (🎁 ${escapeHtml(p.sale.short)}: −${money(off)})` : ''
-    return `• ${escapeHtml(p.name)}, ${escapeHtml(o.label)} × ${l.qty} = ${money(o.price * l.qty - off)}${promo}`
+    const sku = typeof p.sku === 'string' && p.sku.trim() ? ` [${escapeHtml(p.sku.trim())}]` : ''
+    return `• ${escapeHtml(p.name)}${sku}, ${escapeHtml(o.label)} × ${l.qty} = ${money(o.price * l.qty - off)}${promo}`
   })
   return [
     '🛒 <b>Нове замовлення</b>',

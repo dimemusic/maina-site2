@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { PrimaryButton } from './Layout'
 import { sized, useContent } from '../lib/content'
 import { cartTotals, findOption, normalizePhone, promoDiscount, type Line } from '../lib/order-math.js'
@@ -24,6 +24,32 @@ async function npGet(qs: string, signal: AbortSignal): Promise<NpItem[]> {
 }
 
 const MAX_SHOWN = 100
+
+// Телефон: поле завжди починається з «+380 », людина вводить лише 9 цифр → «+380 50 123 45 67»
+const PHONE_PREFIX = '+380 '
+
+// Лишає національні цифри (до 9): прибирає код країни 380 (якщо це вставка повного номера) і провідний 0 («050…»)
+function nationalDigits(raw: string, stripCountry: boolean): string {
+  let d = raw.replace(/\D/g, '')
+  if (stripCountry && d.startsWith('380')) d = d.slice(3)
+  if (d.startsWith('0')) d = d.slice(1)
+  return d.slice(0, 9)
+}
+
+function formatPhone(digits: string): string {
+  const groups = [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 7), digits.slice(7, 9)].filter(Boolean)
+  return PHONE_PREFIX + groups.join(' ')
+}
+
+// Позиція каретки одразу після n-ї національної цифри у відформатованому рядку
+function caretAfterDigits(formatted: string, n: number): number {
+  let seen = 0
+  for (let i = PHONE_PREFIX.length; i < formatted.length; i++) {
+    if (seen === n) return i
+    if (/\d/.test(formatted[i])) seen++
+  }
+  return formatted.length
+}
 
 function Suggest({
   id,
@@ -133,7 +159,7 @@ export default function Cart({
 }) {
   const [step, setStep] = useState<Step>('cart')
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
+  const [phone, setPhone] = useState(PHONE_PREFIX)
   const [address, setAddress] = useState('') // запасне текстове поле, якщо Нова пошта не відповідає
   const [npDown, setNpDown] = useState(false)
   const [cityText, setCityText] = useState('')
@@ -212,6 +238,35 @@ export default function Cart({
     return () => ctrl.abort()
   }, [city])
 
+  const onPhoneChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const input = e.target
+    const v = input.value
+    const caret = input.selectionStart ?? v.length
+    // Префікс цілий → беремо те, що після нього; префікс зачепили (виділення/Backspace) → відновлюємо його
+    const hasPrefix = v.startsWith(PHONE_PREFIX)
+    const rest = hasPrefix ? v.slice(PHONE_PREFIX.length) : PHONE_PREFIX.startsWith(v) ? '' : v
+    const digits = nationalDigits(rest, !hasPrefix)
+    const formatted = formatPhone(digits)
+    setPhone(formatted)
+    if (hasPrefix && caret < v.length) {
+      let before = v.slice(PHONE_PREFIX.length, caret).replace(/\D/g, '').length
+      if (rest.replace(/\D/g, '').startsWith('0')) before = Math.max(0, before - 1)
+      const pos = caretAfterDigits(formatted, Math.min(before, digits.length))
+      requestAnimationFrame(() => input.setSelectionRange(pos, pos))
+    }
+  }
+
+  const onPhonePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    setPhone(formatPhone(nationalDigits(e.clipboardData.getData('text'), true)))
+  }
+
+  // Backspace не заходить у префікс
+  const onPhoneKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    const { selectionStart, selectionEnd } = e.currentTarget
+    if (e.key === 'Backspace' && selectionStart === selectionEnd && (selectionStart ?? 0) <= PHONE_PREFIX.length) e.preventDefault()
+  }
+
   const whQuery = whText.trim().toLowerCase()
   const whItems = warehouse || !whQuery ? warehouses : warehouses.filter((w) => w.name.toLowerCase().includes(whQuery))
   const fullAddress = npDown ? address.trim() : city && warehouse ? `${city.name}, ${warehouse.name}` : ''
@@ -222,7 +277,7 @@ export default function Cart({
     const normalized = normalizePhone(phone)
     const errs: Errors = {}
     if (name.trim().length < 2) errs.name = 'Вкажіть ім’я'
-    if (!normalized) errs.phone = 'Введіть номер у форматі +380 50 123 45 67 або 050 123 45 67'
+    if (!normalized) errs.phone = 'Введіть 9 цифр після +380, наприклад +380 50 123 45 67'
     if (fullAddress.length < 5) errs.address = npDown ? 'Вкажіть місто та відділення Нової пошти' : city ? 'Оберіть відділення зі списку' : 'Оберіть місто зі списку'
     setErrors(errs)
     if (Object.keys(errs).length > 0) return
@@ -242,7 +297,7 @@ export default function Cart({
       // Очищаємо кошик лише після успішної відповіді сервера
       onClear()
       setName('')
-      setPhone('')
+      setPhone(PHONE_PREFIX)
       setAddress('')
       setCityText('')
       setCity(null)
@@ -306,7 +361,7 @@ export default function Cart({
                 </div>
                 <div>
                   <label htmlFor="o-phone" className={LABEL}>Телефон *</label>
-                  <input id="o-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={25} autoComplete="tel" placeholder="+380 50 123 45 67" className={INPUT} />
+                  <input id="o-phone" type="tel" inputMode="tel" value={phone} onChange={onPhoneChange} onPaste={onPhonePaste} onKeyDown={onPhoneKeyDown} maxLength={25} autoComplete="tel" className={INPUT} />
                   {errors.phone && <p className={ERR}>{errors.phone}</p>}
                 </div>
                 {npDown ? (
