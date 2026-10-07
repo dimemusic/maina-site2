@@ -1,4 +1,4 @@
-import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type HtmlTagDescriptor, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
 react(),
       tailwindcss(),
+      novaPoshtaDevApi(loadEnv(mode, __dirname, '').NOVA_POSHTA_API_KEY),
       figmaSiteConfiguration(siteConfiguration),
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
@@ -46,6 +47,38 @@ react(),
     },
   }
 })
+
+/**
+ * Dev-only: віддає /api/np на localhost тим самим обробником, що й Vercel (api/np.js).
+ * Ключ NOVA_POSHTA_API_KEY береться з .env.local.
+ */
+function novaPoshtaDevApi(apiKey: string | undefined): Plugin {
+  return {
+    name: 'nova-poshta-dev-api',
+    apply: 'serve',
+    configureServer(server) {
+      // Без перевірки на «вже є в process.env»: порожнє значення там перекривало б ключ з .env.local
+      if (apiKey) process.env.NOVA_POSHTA_API_KEY = apiKey
+      server.middlewares.use('/api/np', async (req: any, res: any, next) => {
+        try {
+          const { default: handler } = await server.ssrLoadModule('/api/np.js')
+          req.query = Object.fromEntries(new URL(req.url || '/', 'http://localhost').searchParams)
+          res.status = (code: number) => {
+            res.statusCode = code
+            return res
+          }
+          res.json = (data: unknown) => {
+            res.setHeader('Content-Type', 'application/json; charset=utf-8')
+            res.end(JSON.stringify(data))
+          }
+          await handler(req, res)
+        } catch (err) {
+          next(err as Error)
+        }
+      })
+    },
+  }
+}
 
 type FigmaSiteConfiguration = {
   title?: string

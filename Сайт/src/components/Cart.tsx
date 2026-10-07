@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { PrimaryButton } from './Layout'
 import { sized, useContent } from '../lib/content'
 import { cartTotals, findOption, normalizePhone, promoDiscount, type Line } from '../lib/order-math.js'
@@ -12,6 +12,109 @@ const ERR = `${F} mt-[calc(var(--u)*4)] text-[length:round(calc(var(--u)*13),2px
 
 type Step = 'cart' | 'checkout' | 'done'
 type Errors = { name?: string; phone?: string; address?: string }
+type NpItem = { ref: string; name: string; area?: string }
+
+// Підказки Нової пошти (api/np.js). Будь-яка помилка → кидаємо, а форма переходить на звичайне текстове поле
+async function npGet(qs: string, signal: AbortSignal): Promise<NpItem[]> {
+  const res = await fetch(`/api/np?${qs}`, { signal })
+  if (!res.ok) throw new Error(`np ${res.status}`)
+  const data = await res.json()
+  if (!Array.isArray(data)) throw new Error('np: некоректна відповідь')
+  return data
+}
+
+const MAX_SHOWN = 100
+
+function Suggest({
+  id,
+  value,
+  onChange,
+  items,
+  onPick,
+  placeholder,
+  note,
+  disabled,
+}: {
+  id: string
+  value: string
+  onChange: (text: string) => void
+  items: NpItem[]
+  onPick: (item: NpItem) => void
+  placeholder: string
+  note?: string
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const shown = items.slice(0, MAX_SHOWN)
+  const show = open && !disabled && (shown.length > 0 || !!note)
+
+  const pick = (item: NpItem) => {
+    onPick(item)
+    setOpen(false)
+  }
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (!show) return
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (shown.length > 0) setActive((a) => (a + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length)
+    } else if (e.key === 'Enter') {
+      e.preventDefault() // Enter у списку обирає пункт, а не надсилає форму
+      if (shown[active]) pick(shown[active])
+    } else if (e.key === 'Escape') {
+      e.stopPropagation() // закриваємо лише список, а не весь кошик
+      setOpen(false)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <input
+        id={id}
+        role="combobox"
+        aria-expanded={show}
+        aria-controls={`${id}-list`}
+        aria-autocomplete="list"
+        autoComplete="off"
+        value={value}
+        disabled={disabled}
+        maxLength={100}
+        placeholder={placeholder}
+        onChange={(e) => {
+          onChange(e.target.value)
+          setActive(0)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={onKeyDown}
+        className={`${INPUT} disabled:cursor-not-allowed disabled:bg-[#f7f7f7]`}
+      />
+      {show && (
+        <ul id={`${id}-list`} role="listbox" className="absolute z-10 mt-[calc(var(--u)*4)] max-h-[round(calc(var(--u)*240),4px)] w-full overflow-y-auto rounded-[round(calc(var(--u)*8),4px)] border border-[#e6e6e6] bg-white shadow-[0_16px_32px_-20px_rgba(38,51,37,0.45)]">
+          {shown.length === 0 && <li className={`${F} px-[round(calc(var(--u)*16),4px)] py-[round(calc(var(--u)*12),4px)] text-[length:round(calc(var(--u)*14),2px)] text-[#929292]`}>{note}</li>}
+          {shown.map((item, i) => (
+            <li
+              key={item.ref}
+              role="option"
+              aria-selected={i === active}
+              onMouseDown={(e) => {
+                e.preventDefault() // не даємо інпуту втратити фокус до вибору
+                pick(item)
+              }}
+              onMouseEnter={() => setActive(i)}
+              className={`${F} cursor-pointer px-[round(calc(var(--u)*16),4px)] py-[round(calc(var(--u)*12),4px)] text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*20),4px)] text-[#3a4c38] ${i === active ? 'bg-[#3a4c38]/8' : ''}`}
+            >
+              {item.name}
+              {item.area && <span className="block text-[length:round(calc(var(--u)*12),2px)] text-[#929292]">{item.area}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 export default function Cart({
   open,
@@ -31,7 +134,16 @@ export default function Cart({
   const [step, setStep] = useState<Step>('cart')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
-  const [address, setAddress] = useState('')
+  const [address, setAddress] = useState('') // запасне текстове поле, якщо Нова пошта не відповідає
+  const [npDown, setNpDown] = useState(false)
+  const [cityText, setCityText] = useState('')
+  const [city, setCity] = useState<NpItem | null>(null)
+  const [cities, setCities] = useState<NpItem[]>([])
+  const [citiesLoading, setCitiesLoading] = useState(false)
+  const [whText, setWhText] = useState('')
+  const [warehouse, setWarehouse] = useState<NpItem | null>(null)
+  const [warehouses, setWarehouses] = useState<NpItem[]>([])
+  const [whLoading, setWhLoading] = useState(false)
   const [comment, setComment] = useState('')
   const [website, setWebsite] = useState('') // honeypot: люди його не бачать, боти заповнюють
   const [errors, setErrors] = useState<Errors>({})
@@ -62,6 +174,48 @@ export default function Cart({
     if (!open || lines.length === 0) setConfirmClear(false)
   }, [open, lines.length])
 
+  // Підказки міст: debounce 300 мс, застарілі запити скасовуємо
+  useEffect(() => {
+    const q = cityText.trim()
+    if (city || q.length < 2) {
+      setCities([])
+      setCitiesLoading(false)
+      return
+    }
+    setCitiesLoading(true)
+    const ctrl = new AbortController()
+    const t = setTimeout(() => {
+      npGet(`action=cities&q=${encodeURIComponent(q)}`, ctrl.signal)
+        .then(setCities)
+        .catch(() => !ctrl.signal.aborted && setNpDown(true))
+        .finally(() => !ctrl.signal.aborted && setCitiesLoading(false))
+    }, 300)
+    return () => {
+      clearTimeout(t)
+      ctrl.abort()
+    }
+  }, [cityText, city])
+
+  // Відділення обраного міста
+  useEffect(() => {
+    setWarehouses([])
+    if (!city) {
+      setWhLoading(false)
+      return
+    }
+    setWhLoading(true)
+    const ctrl = new AbortController()
+    npGet(`action=warehouses&ref=${encodeURIComponent(city.ref)}`, ctrl.signal)
+      .then(setWarehouses)
+      .catch(() => !ctrl.signal.aborted && setNpDown(true))
+      .finally(() => !ctrl.signal.aborted && setWhLoading(false))
+    return () => ctrl.abort()
+  }, [city])
+
+  const whQuery = whText.trim().toLowerCase()
+  const whItems = warehouse || !whQuery ? warehouses : warehouses.filter((w) => w.name.toLowerCase().includes(whQuery))
+  const fullAddress = npDown ? address.trim() : city && warehouse ? `${city.name}, ${warehouse.name}` : ''
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (sending || lines.length === 0) return
@@ -69,7 +223,7 @@ export default function Cart({
     const errs: Errors = {}
     if (name.trim().length < 2) errs.name = 'Вкажіть ім’я'
     if (!normalized) errs.phone = 'Введіть номер у форматі +380 50 123 45 67 або 050 123 45 67'
-    if (address.trim().length < 5) errs.address = 'Вкажіть місто та відділення Нової пошти'
+    if (fullAddress.length < 5) errs.address = npDown ? 'Вкажіть місто та відділення Нової пошти' : city ? 'Оберіть відділення зі списку' : 'Оберіть місто зі списку'
     setErrors(errs)
     if (Object.keys(errs).length > 0) return
 
@@ -79,7 +233,7 @@ export default function Cart({
       const res = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), phone: normalized, address: address.trim(), comment: comment.trim(), website, lines }),
+        body: JSON.stringify({ name: name.trim(), phone: normalized, address: fullAddress, comment: comment.trim(), website, lines }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => null)
@@ -90,6 +244,10 @@ export default function Cart({
       setName('')
       setPhone('')
       setAddress('')
+      setCityText('')
+      setCity(null)
+      setWhText('')
+      setWarehouse(null)
       setComment('')
       setStep('done')
     } catch (err) {
@@ -151,11 +309,57 @@ export default function Cart({
                   <input id="o-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={25} autoComplete="tel" placeholder="+380 50 123 45 67" className={INPUT} />
                   {errors.phone && <p className={ERR}>{errors.phone}</p>}
                 </div>
-                <div>
-                  <label htmlFor="o-address" className={LABEL}>Місто та відділення Нової пошти *</label>
-                  <input id="o-address" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} placeholder="Київ, відділення №12" className={INPUT} />
-                  {errors.address && <p className={ERR}>{errors.address}</p>}
-                </div>
+                {npDown ? (
+                  <div>
+                    <label htmlFor="o-address" className={LABEL}>Місто та відділення Нової пошти *</label>
+                    <input id="o-address" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} placeholder="Київ, відділення №12" className={INPUT} />
+                    {errors.address && <p className={ERR}>{errors.address}</p>}
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label htmlFor="o-city" className={LABEL}>Місто *</label>
+                      <Suggest
+                        id="o-city"
+                        value={cityText}
+                        onChange={(text) => {
+                          setCityText(text)
+                          setCity(null)
+                          setWhText('')
+                          setWarehouse(null)
+                        }}
+                        items={cities}
+                        onPick={(item) => {
+                          setCity(item)
+                          setCityText(item.name)
+                        }}
+                        placeholder="Почніть вводити назву міста"
+                        note={citiesLoading ? 'Шукаємо…' : cityText.trim().length >= 2 && !city ? 'Нічого не знайдено' : undefined}
+                      />
+                      {!city && errors.address && <p className={ERR}>{errors.address}</p>}
+                    </div>
+                    <div>
+                      <label htmlFor="o-warehouse" className={LABEL}>Відділення або поштомат *</label>
+                      <Suggest
+                        id="o-warehouse"
+                        value={whText}
+                        onChange={(text) => {
+                          setWhText(text)
+                          setWarehouse(null)
+                        }}
+                        items={whItems}
+                        onPick={(item) => {
+                          setWarehouse(item)
+                          setWhText(item.name)
+                        }}
+                        placeholder={city ? 'Пошук за номером чи адресою' : 'Спочатку оберіть місто'}
+                        note={whLoading ? 'Завантажуємо відділення…' : 'Нічого не знайдено'}
+                        disabled={!city}
+                      />
+                      {city && errors.address && <p className={ERR}>{errors.address}</p>}
+                    </div>
+                  </>
+                )}
                 <div>
                   <label htmlFor="o-comment" className={LABEL}>Коментар</label>
                   <textarea id="o-comment" value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} rows={3} placeholder="Побажання до замовлення (необов’язково)" className={`${INPUT} resize-none`} />
