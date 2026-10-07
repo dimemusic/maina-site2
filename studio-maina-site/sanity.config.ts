@@ -16,4 +16,11 @@ export default defineConfig({
   schema: {
     types: schemaTypes,
   },
+
+  // Замовлення створює лише сервер: прибираємо їх зі списку «Новий документ» і дублювання
+  document: {
+    newDocumentOptions: (prev) => prev.filter((item) => item.templateId !== 'order'),
+    actions: (prev, {schemaType}) =>
+      schemaType === 'order' ? prev.filter(({action}) => action !== 'duplicate') : prev,
+  },
 })

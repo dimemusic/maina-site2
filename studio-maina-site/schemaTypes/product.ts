@@ -1,9 +1,24 @@
-import {defineArrayMember, defineField, defineType} from 'sanity'
+import {defineArrayMember, defineField, defineType, type SanityClient} from 'sanity'
+
+// Наступний вільний артикул: найбільше число серед усіх товарів (разом із чернетками) + 1
+async function nextSku(client: SanityClient): Promise<string> {
+  const skus = await client.fetch<(string | null)[]>('*[_type == "product" && defined(sku)].sku', {})
+  const max = skus.reduce((m, s) => {
+    const n = Number(/^MB-(\d+)$/.exec(s ?? '')?.[1] ?? 0)
+    return n > m ? n : m
+  }, 0)
+  return `MB-${String(max + 1).padStart(3, '0')}`
+}
 
 export const product = defineType({
   name: 'product',
   title: 'Товар',
   type: 'document',
+  // Дублювання (Duplicate) у студії копіює готовий документ і цей блок не викликає,
+  // тому копія з тим самим артикулом ловиться валідацією унікальності нижче
+  initialValue: async (_params, context) => ({
+    sku: await nextSku(context.getClient({apiVersion: '2025-02-19', perspective: 'raw'})),
+  }),
   groups: [
     {name: 'main', title: 'Основне', default: true},
     {name: 'variants', title: 'Ваги та ціни'},
@@ -32,7 +47,7 @@ export const product = defineType({
       name: 'sku',
       title: 'Артикул',
       description:
-        'Формат MB-001: літери MB, дефіс і щонайменше три цифри. У кожного товару свій артикул, повторювати його не можна. Покупці його не бачать, він потрапляє у повідомлення про замовлення.',
+        'Формат MB-001: літери MB, дефіс і щонайменше три цифри. У кожного товару свій артикул, повторювати його не можна. Покупці його не бачать, він потрапляє у повідомлення про замовлення. Код присвоюється автоматично й не змінюється при редагуванні товару. Якщо позиція стала іншим товаром, створіть новий.',
       type: 'string',
       group: 'main',
       validation: (rule) =>
@@ -46,7 +61,9 @@ export const product = defineType({
               'count(*[_type == "product" && sku == $sku && !(_id in [$id, "drafts." + $id])])',
               {sku: value, id},
             )
-          return taken > 0 ? 'Такий артикул уже є в іншому товарі' : true
+          if (taken === 0) return true
+          const free = await nextSku(context.getClient({apiVersion: '2025-02-19', perspective: 'raw'}))
+          return `Такий артикул уже є в іншому товарі. Якщо це копія, вкажіть наступний вільний артикул: ${free}`
         }),
     }),
     defineField({

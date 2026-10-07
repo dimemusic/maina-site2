@@ -1,8 +1,11 @@
 // Vercel serverless function: POST /api/order
 // Приймає замовлення з сайту й надсилає його в Telegram через Bot API.
 // Сума рахується тут, за актуальними цінами з Sanity: з браузера приходять лише id товару, ключ варіанта й кількість.
+// Перед відправкою замовлення отримує номер (атомарний лічильник orderCounter) і зберігається в Sanity як документ order.
+// Ім'я, телефон і адреса в Sanity НЕ потрапляють (датасет публічний), вони йдуть лише в Telegram.
 // Токени й ключі беруться ТІЛЬКИ зі змінних середовища:
-//   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, SANITY_PROJECT_ID, SANITY_DATASET (та необов'язковий SANITY_API_READ_TOKEN).
+//   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, SANITY_PROJECT_ID, SANITY_DATASET, SANITY_API_WRITE_TOKEN
+//   (та необов'язковий SANITY_API_READ_TOKEN).
 import { cartTotals, findOption, normalizePhone, promoDiscount, sanitizeLines } from '../src/lib/order-math.js'
 
 const SANITY_API_VERSION = '2025-02-19'
@@ -50,6 +53,83 @@ async function fetchCatalog(ids) {
   }
 }
 
+// --- Запис замовлення в Sanity ---
+const COUNTER_ID = 'orderCounter'
+const COUNTER_START = 1000 // перше замовлення отримає 1001
+
+// Одна транзакція до Sanity (api.sanity.io/data/mutate). Кидає помилку з кодом статусу, без токена й тіла запиту.
+async function sanityMutate(mutations, { returnDocuments = false } = {}) {
+  const projectId = process.env.SANITY_PROJECT_ID
+  const dataset = process.env.SANITY_DATASET || 'production'
+  const token = process.env.SANITY_API_WRITE_TOKEN
+  if (!projectId || !token) throw new Error('SANITY_PROJECT_ID або SANITY_API_WRITE_TOKEN не задані у змінних середовища')
+  const res = await fetch(
+    `https://${projectId}.api.sanity.io/v${SANITY_API_VERSION}/data/mutate/${dataset}${returnDocuments ? '?returnDocuments=true' : ''}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ mutations }),
+      signal: AbortSignal.timeout(4000),
+    },
+  )
+  if (!res.ok) throw new Error(`Sanity mutate відповів ${res.status}`)
+  return res.json()
+}
+
+// Наступний номер: createIfNotExists + inc в одній транзакції, тож два одночасних замовлення не отримають однаковий номер
+async function nextOrderNumber() {
+  const { results } = await sanityMutate(
+    [
+      { createIfNotExists: { _id: COUNTER_ID, _type: 'orderCounter', value: COUNTER_START } },
+      { patch: { id: COUNTER_ID, inc: { value: 1 } } },
+    ],
+    { returnDocuments: true },
+  )
+  const value = results?.find((r) => r.operation === 'update')?.document?.value
+  if (!Number.isInteger(value)) throw new Error('Sanity не повернув номер замовлення')
+  return value
+}
+
+// Зберігає замовлення без персональних даних. `create` (не createOrReplace) не дасть перезаписати вже існуюче замовлення.
+async function saveOrder({ lines, catalog }) {
+  const number = await nextOrderNumber()
+  const { saved, total } = cartTotals(lines, catalog)
+  const items = lines.map((l) => {
+    const p = catalog[l.id]
+    const o = findOption(p, l.opt)
+    return {
+      _key: `${l.id}-${l.opt}`.slice(0, 64),
+      _type: 'orderItem',
+      sku: typeof p.sku === 'string' ? p.sku.trim() : '',
+      title: p.name,
+      option: o.label,
+      qty: l.qty,
+      price: o.price,
+      sum: o.price * l.qty - promoDiscount(p, l.opt, l.qty),
+    }
+  })
+  await sanityMutate([
+    {
+      create: {
+        _id: `order-${number}`,
+        _type: 'order',
+        number,
+        createdAt: new Date().toISOString(),
+        status: 'new',
+        items,
+        total,
+        discount: saved,
+        telegramSent: false,
+      },
+    },
+  ])
+  return number
+}
+
+async function markTelegramSent(number) {
+  await sanityMutate([{ patch: { id: `order-${number}`, set: { telegramSent: true } } }])
+}
+
 // --- Простий rate limit: до 5 замовлень з одного IP за 10 хвилин ---
 // Пам'ять живе, поки живе інстанс функції, тож це захист «за найкращих зусиль»
 // (разом із honeypot-полем цього достатньо від простого спаму).
@@ -74,7 +154,7 @@ const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 const money = (n) => `${Number.isInteger(n) ? n : n.toFixed(2)} ₴`
 const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 
-function buildMessage({ name, phone, address, comment, lines, catalog, freeDelivery }) {
+function buildMessage({ orderLabel, savedToSanity, name, phone, address, comment, lines, catalog, freeDelivery }) {
   const { saved, total } = cartTotals(lines, catalog)
   const items = lines.map((l) => {
     const p = catalog[l.id]
@@ -85,7 +165,8 @@ function buildMessage({ name, phone, address, comment, lines, catalog, freeDeliv
     return `• ${escapeHtml(p.name)}${sku}, ${escapeHtml(o.label)} × ${l.qty} = ${money(o.price * l.qty - off)}${promo}`
   })
   return [
-    '🛒 <b>Нове замовлення</b>',
+    `🛒 <b>Нове замовлення №${escapeHtml(orderLabel)}</b>`,
+    ...(savedToSanity ? [] : ['⚠️ Не збережено в Sanity, номер тимчасовий. Занесіть замовлення вручну.']),
     '',
     `👤 ${escapeHtml(name)}`,
     `📞 ${escapeHtml(phone)}`,
@@ -159,17 +240,37 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Сервер замовлень ще не налаштований. Зателефонуйте нам, будь ласка.' })
   }
 
+  // Номер і запис у Sanity. Якщо Sanity недоступний, замовлення все одно йде в Telegram із запасним номером.
+  let orderNumber = null
+  try {
+    orderNumber = await saveOrder({ lines, catalog })
+  } catch (err) {
+    console.error('Не вдалося зберегти замовлення в Sanity:', err instanceof Error ? err.message : 'unknown')
+  }
+  const savedToSanity = orderNumber !== null
+  const orderLabel = savedToSanity ? String(orderNumber) : `T-${String(Date.now()).slice(-6)}`
+
   try {
     const tg = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: buildMessage({ name, phone, address, comment, lines, catalog, freeDelivery }), parse_mode: 'HTML' }),
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: buildMessage({ orderLabel, savedToSanity, name, phone, address, comment, lines, catalog, freeDelivery }),
+        parse_mode: 'HTML',
+      }),
     })
     if (!tg.ok) {
       // У лог пишемо лише статус і опис помилки від Telegram — без токена
       const info = await tg.json().catch(() => ({}))
       console.error('Telegram error', tg.status, info.description)
       return res.status(502).json({ error: 'Не вдалося передати замовлення. Спробуйте ще раз пізніше.' })
+    }
+    // Замовлення вже в Telegram: збій позначки не повинен показувати покупцеві помилку
+    if (savedToSanity) {
+      await markTelegramSent(orderNumber).catch((err) =>
+        console.error('Не вдалося поставити telegramSent:', err instanceof Error ? err.message : 'unknown'),
+      )
     }
     return res.status(200).json({ ok: true })
   } catch (err) {
