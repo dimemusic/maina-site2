@@ -175,6 +175,7 @@ export default function Cart({
   const [errors, setErrors] = useState<Errors>({})
   const [sending, setSending] = useState(false)
   const [serverError, setServerError] = useState('')
+  const [orderNumber, setOrderNumber] = useState('')
   const [confirmClear, setConfirmClear] = useState(false)
   const { byId: P, site } = useContent()
   const { saved, total } = cartTotals(lines, P)
@@ -294,6 +295,8 @@ export default function Cart({
         const data = await res.json().catch(() => null)
         throw new Error(data?.error || 'Не вдалося надіслати замовлення. Спробуйте ще раз.')
       }
+      const data = await res.json().catch(() => null)
+      setOrderNumber(typeof data?.orderNumber === 'string' ? data.orderNumber : '')
       // Очищаємо кошик лише після успішної відповіді сервера
       onClear()
       setName('')
@@ -337,6 +340,7 @@ export default function Cart({
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
             </div>
             <h3 className="font-evo-bold text-[length:round(calc(var(--u)*24),2px)] leading-[round(calc(var(--u)*32),4px)] text-[#3a4c38]">Дякуємо за замовлення!</h3>
+            {orderNumber && <p className="font-evo-bold text-[length:round(calc(var(--u)*20),2px)] leading-[round(calc(var(--u)*28),4px)] text-[#3a4c38]">Ваш номер замовлення: №{orderNumber}</p>}
             <p className={`${F} max-w-[round(calc(var(--u)*320),4px)] text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] text-[#4c5147]`}>Ми зателефонуємо протягом 15 хвилин, щоб підтвердити деталі та доставку.</p>
             <PrimaryButton className="mt-[round(calc(var(--u)*8),4px)] max-w-[round(calc(var(--u)*240),4px)]" onClick={onClose}>Продовжити покупки</PrimaryButton>
           </div>

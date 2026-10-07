@@ -272,7 +272,7 @@ export default async function handler(req, res) {
         console.error('Не вдалося поставити telegramSent:', err instanceof Error ? err.message : 'unknown'),
       )
     }
-    return res.status(200).json({ ok: true })
+    return res.status(200).json({ ok: true, orderNumber: orderLabel })
   } catch (err) {
     console.error('Telegram request failed', err instanceof Error ? err.name : 'unknown')
     return res.status(502).json({ error: 'Не вдалося передати замовлення. Спробуйте ще раз пізніше.' })
