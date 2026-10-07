@@ -25,6 +25,9 @@ async function npGet(qs: string, signal: AbortSignal): Promise<NpItem[]> {
 
 const MAX_SHOWN = 100
 
+// Кеш відділень на час сесії: ключ «місто + текст пошуку»
+const warehouseCache = new Map<string, NpItem[]>()
+
 // Телефон: поле завжди починається з «+380 », людина вводить лише 9 цифр → «+380 50 123 45 67»
 const PHONE_PREFIX = '+380 '
 
@@ -223,21 +226,46 @@ export default function Cart({
     }
   }, [cityText, city])
 
-  // Відділення обраного міста
+  // Відділення обраного міста: сервер шукає за введеним текстом і віддає до 30 штук.
+  // Debounce 250 мс, застарілі запити скасовуємо, готові відповіді беремо з кешу
   useEffect(() => {
-    setWarehouses([])
     if (!city) {
+      setWarehouses([])
       setWhLoading(false)
       return
     }
+    if (warehouse) {
+      setWhLoading(false)
+      return
+    }
+    const q = whText.trim()
+    const key = `${city.ref}|${q.toLowerCase()}`
+    const cached = warehouseCache.get(key)
+    if (cached) {
+      setWarehouses(cached)
+      setWhLoading(false)
+      return
+    }
+    setWarehouses([])
     setWhLoading(true)
     const ctrl = new AbortController()
-    npGet(`action=warehouses&ref=${encodeURIComponent(city.ref)}`, ctrl.signal)
-      .then(setWarehouses)
-      .catch(() => !ctrl.signal.aborted && setNpDown(true))
-      .finally(() => !ctrl.signal.aborted && setWhLoading(false))
-    return () => ctrl.abort()
-  }, [city])
+    const t = setTimeout(
+      () => {
+        npGet(`action=warehouses&ref=${encodeURIComponent(city.ref)}${q ? `&q=${encodeURIComponent(q)}` : ''}`, ctrl.signal)
+          .then((data) => {
+            warehouseCache.set(key, data)
+            setWarehouses(data)
+          })
+          .catch(() => !ctrl.signal.aborted && setNpDown(true))
+          .finally(() => !ctrl.signal.aborted && setWhLoading(false))
+      },
+      q ? 250 : 0,
+    )
+    return () => {
+      clearTimeout(t)
+      ctrl.abort()
+    }
+  }, [city, whText, warehouse])
 
   const onPhoneChange = (e: ChangeEvent<HTMLInputElement>) => {
     const input = e.target
@@ -268,8 +296,6 @@ export default function Cart({
     if (e.key === 'Backspace' && selectionStart === selectionEnd && (selectionStart ?? 0) <= PHONE_PREFIX.length) e.preventDefault()
   }
 
-  const whQuery = whText.trim().toLowerCase()
-  const whItems = warehouse || !whQuery ? warehouses : warehouses.filter((w) => w.name.toLowerCase().includes(whQuery))
   const fullAddress = npDown ? address.trim() : city && warehouse ? `${city.name}, ${warehouse.name}` : ''
 
   const submit = async (e: FormEvent) => {
@@ -406,13 +432,13 @@ export default function Cart({
                           setWhText(text)
                           setWarehouse(null)
                         }}
-                        items={whItems}
+                        items={warehouses}
                         onPick={(item) => {
                           setWarehouse(item)
                           setWhText(item.name)
                         }}
                         placeholder={city ? 'Пошук за номером чи адресою' : 'Спочатку оберіть місто'}
-                        note={whLoading ? 'Завантажуємо відділення…' : 'Нічого не знайдено'}
+                        note={whLoading ? 'Завантаження…' : 'Нічого не знайдено'}
                         disabled={!city}
                       />
                       {city && errors.address && <p className={ERR}>{errors.address}</p>}

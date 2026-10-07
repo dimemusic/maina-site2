@@ -1,12 +1,14 @@
 // Vercel serverless function: GET /api/np
 // Автопідказки Нової пошти для форми замовлення. Дві дії через query:
 //   ?action=cities&q=Київ          → [{ ref, name, area }]  (до 8 міст/сіл, q від 2 символів)
-//   ?action=warehouses&ref=<UUID>  → [{ ref, name }]        (відділення й поштомати населеного пункту)
+//   ?action=warehouses&ref=<UUID>[&q=текст] → [{ ref, name }]  (до 30 відділень і поштоматів: пошук за q, номером чи вулицею; відділення раніше за поштомати)
 // Ключ береться ТІЛЬКИ зі змінної середовища NOVA_POSHTA_API_KEY; у відповідь він не потрапляє, як і сирі помилки НП.
 const NP_URL = 'https://api.novaposhta.ua/v2.0/json/'
 const MAX_CITIES = 8
-const PAGE_SIZE = 500
-const MAX_PAGES = 8 // 8 × 500: вистачає навіть для Львова (~3000 відділень і поштоматів)
+const MAX_WAREHOUSES = 30
+const POSTOMAT_TYPE_REF = 'f9316480-5f2d-425d-bc2c-ac7cd29decf0'
+// Відповіді однакові для всіх покупців, тож їх можна кешувати на стороні Vercel
+const CACHE_CONTROL = 'public, s-maxage=3600, stale-while-revalidate=86400'
 const RATE_LIMIT_WAIT_MS = 600 // НП пропускає один запит на ключ приблизно раз на 0,5 с
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -48,15 +50,19 @@ async function searchCities(q) {
     .map((a) => ({ ref: a.Ref, name: a.MainDescription, area: [a.Region, a.Area].filter(Boolean).join(', ') }))
 }
 
-async function listWarehouses(settlementRef) {
-  const out = []
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    if (page > 1) await sleep(RATE_LIMIT_WAIT_MS)
-    const data = await callNp('Address', 'getWarehouses', { SettlementRef: settlementRef, Language: 'UA', Limit: String(PAGE_SIZE), Page: String(page) })
-    for (const w of data) if (w.Ref && w.Description) out.push({ ref: w.Ref, name: w.Description })
-    if (data.length < PAGE_SIZE) break
-  }
-  return out
+const isPostomat = (w) => w.TypeOfWarehouse === POSTOMAT_TYPE_REF || /^поштомат/i.test(w.Description)
+
+async function listWarehouses(settlementRef, q) {
+  const data = await callNp('Address', 'getWarehouses', {
+    SettlementRef: settlementRef,
+    Language: 'UA',
+    ...(q ? { FindByString: q } : {}),
+    Limit: String(MAX_WAREHOUSES),
+    Page: '1',
+  })
+  const items = data.filter((w) => w.Ref && w.Description)
+  // Відділення спершу, поштомати потім (сортування стабільне, порядок від НП всередині груп зберігається)
+  return [...items.filter((w) => !isPostomat(w)), ...items.filter(isPostomat)].map((w) => ({ ref: w.Ref, name: w.Description }))
 }
 
 // --- Простий rate limit: до 60 запитів з одного IP за хвилину (підказки йдуть частіше, ніж замовлення) ---
@@ -101,13 +107,17 @@ export default async function handler(req, res) {
     if (action === 'cities') {
       const q = param(query.q)
       if (q.length < 2 || q.length > 50) return res.status(400).json({ error: 'Некоректний запит.' })
-      return res.status(200).json(await searchCities(q))
+      const cities = await searchCities(q)
+      res.setHeader('Cache-Control', CACHE_CONTROL) // лише після успіху, щоб не кешувати помилки
+      return res.status(200).json(cities)
     }
     if (action === 'warehouses') {
       const ref = param(query.ref)
-      if (!UUID.test(ref)) return res.status(400).json({ error: 'Некоректний запит.' })
-      res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
-      return res.status(200).json(await listWarehouses(ref))
+      const q = param(query.q)
+      if (!UUID.test(ref) || q.length > 50) return res.status(400).json({ error: 'Некоректний запит.' })
+      const warehouses = await listWarehouses(ref, q)
+      res.setHeader('Cache-Control', CACHE_CONTROL)
+      return res.status(200).json(warehouses)
     }
     return res.status(400).json({ error: 'Некоректний запит.' })
   } catch (err) {
