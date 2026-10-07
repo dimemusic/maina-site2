@@ -37,6 +37,7 @@ export default function Cart({
   const [errors, setErrors] = useState<Errors>({})
   const [sending, setSending] = useState(false)
   const [serverError, setServerError] = useState('')
+  const [confirmClear, setConfirmClear] = useState(false)
   const { byId: P, site } = useContent()
   const { saved, total } = cartTotals(lines, P)
   const count = lines.reduce((s, l) => s + l.qty, 0)
@@ -56,6 +57,10 @@ export default function Cart({
   useEffect(() => {
     if (!open) setStep((s) => (s === 'done' ? 'cart' : s))
   }, [open])
+
+  useEffect(() => {
+    if (!open || lines.length === 0) setConfirmClear(false)
+  }, [open, lines.length])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -240,9 +245,32 @@ export default function Cart({
             </ul>
 
             <div className="px-[round(calc(var(--u)*32),4px)] pb-[round(calc(var(--u)*16),4px)]">
-              <button onClick={onClear} className={`${F} flex h-[round(calc(var(--u)*40),4px)] w-full cursor-pointer items-center justify-center rounded-[round(calc(var(--u)*8),4px)] border border-[#b05a3f] bg-[#b05a3f]/8 text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*16),4px)] font-semibold text-[#963c3c] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#b05a3f] hover:text-white hover:shadow-[0_10px_18px_-12px_rgba(150,60,60,0.8)] active:translate-y-0`}>
-                Очистити кошик
-              </button>
+              {confirmClear ? (
+                <div className="animate-fade flex flex-col gap-[round(calc(var(--u)*8),4px)]">
+                  <p className={`${F} text-center text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*24),4px)] font-medium text-[#4c5147]`}>Очистити кошик?</p>
+                  <div className="flex gap-[round(calc(var(--u)*8),4px)] pb-[round(calc(var(--u)*8),4px)]">
+                    <button
+                      onClick={() => {
+                        setConfirmClear(false)
+                        onClear()
+                      }}
+                      className={`${F} flex h-[round(calc(var(--u)*40),4px)] flex-1 cursor-pointer items-center justify-center rounded-[round(calc(var(--u)*8),4px)] border border-[#b05a3f] bg-[#b05a3f]/8 text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*16),4px)] font-semibold text-[#963c3c] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#b05a3f] hover:text-white hover:shadow-[0_10px_18px_-12px_rgba(150,60,60,0.8)] active:translate-y-0`}
+                    >
+                      Так, очистити
+                    </button>
+                    <button
+                      onClick={() => setConfirmClear(false)}
+                      className={`${F} flex h-[round(calc(var(--u)*40),4px)] flex-1 cursor-pointer items-center justify-center rounded-[round(calc(var(--u)*8),4px)] border border-[#e6e6e6] bg-white text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*16),4px)] font-semibold text-[#3a4c38] transition-all duration-300 hover:-translate-y-0.5 hover:border-[#3a4c38] active:translate-y-0`}
+                    >
+                      Скасувати
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmClear(true)} className={`${F} flex h-[round(calc(var(--u)*40),4px)] w-full cursor-pointer items-center justify-center rounded-[round(calc(var(--u)*8),4px)] border border-[#b05a3f] bg-[#b05a3f]/8 text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*16),4px)] font-semibold text-[#963c3c] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#b05a3f] hover:text-white hover:shadow-[0_10px_18px_-12px_rgba(150,60,60,0.8)] active:translate-y-0`}>
+                  Очистити кошик
+                </button>
+              )}
             </div>
 
             <footer className="flex flex-col gap-[round(calc(var(--u)*16),4px)] border-t border-[#e9e9e9] px-[round(calc(var(--u)*32),4px)] py-[round(calc(var(--u)*24),4px)]">
