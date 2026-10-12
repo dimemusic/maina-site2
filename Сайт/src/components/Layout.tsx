@@ -238,7 +238,7 @@ export function PrimaryButton({ children, onClick, className = '', type = 'butto
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`group font-evo-bold disabled:pointer-events-none disabled:opacity-50 flex h-[round(calc(var(--u)*56),4px)] w-full max-w-[round(calc(var(--u)*320),4px)] cursor-pointer items-center justify-center gap-2 rounded-[round(calc(var(--u)*8),4px)] bg-[#3a4c38] p-[round(calc(var(--u)*16),4px)] text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] text-[#faf6ec] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#2c3b2a] hover:shadow-[0_14px_24px_-12px_rgba(58,76,56,0.8)] active:translate-y-0 ${className}`}
+      className={`group font-evo-bold disabled:pointer-events-none disabled:opacity-50 flex h-[round(calc(var(--u)*56),4px)] w-full md:max-w-[round(calc(var(--u)*320),4px)] cursor-pointer items-center justify-center gap-2 rounded-[round(calc(var(--u)*8),4px)] bg-[#3a4c38] p-[round(calc(var(--u)*16),4px)] text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] text-[#faf6ec] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#2c3b2a] hover:shadow-[0_14px_24px_-12px_rgba(58,76,56,0.8)] active:translate-y-0 ${className}`}
     >
       {children}
     </button>

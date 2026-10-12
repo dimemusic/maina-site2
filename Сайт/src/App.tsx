@@ -4,6 +4,7 @@ import Home from './pages/Home'
 import Menu from './pages/Menu'
 import Product from './pages/Product'
 import Cart, { type Line } from './components/Cart'
+import Toast from './components/Toast'
 import { useContent } from './lib/content'
 import { sanitizeLines } from './lib/order-math.js'
 
@@ -45,6 +46,7 @@ export default function App() {
   const setLines = (update: (ls: Line[]) => Line[]) => setRawLines((raw: unknown) => update(sanitizeLines(raw, byId)))
   const [bump, setBump] = useState(0)
   const [cartOpen, setCartOpen] = useState(false)
+  const [toast, setToast] = useState({ id: '', opt: '', tick: 0 })
   const cart = lines.reduce((s, l) => s + l.qty, 0)
   useEffect(() => localStorage.setItem('cart', JSON.stringify(lines)), [lines])
 
@@ -82,6 +84,8 @@ export default function App() {
       return i < 0 ? [...ls, { id, opt, qty: 1 }] : ls.map((l, j) => (j === i ? { ...l, qty: l.qty + 1 } : l))
     })
     setBump((b) => b + 1)
+    // Коли кошик відкритий, зміни й так видно в ньому, тому toast не показуємо
+    if (!cartOpen) setToast((t) => ({ id, opt, tick: t.tick + 1 }))
   }
   const setQty = (i: number, qty: number) => setLines((ls) => (qty <= 0 ? ls.filter((_, j) => j !== i) : ls.map((l, j) => (j === i ? { ...l, qty } : l))))
   const closeCart = useCallback(() => setCartOpen(false), [])
@@ -116,6 +120,7 @@ export default function App() {
         }}
       />
       <Footer go={go} gap={page === 'home' ? 36 : 16} />
+      <Toast id={toast.id} opt={toast.opt} tick={toast.tick} hidden={cartOpen} onCart={() => setCartOpen(true)} />
     </div>
   )
 }

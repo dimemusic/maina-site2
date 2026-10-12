@@ -233,7 +233,7 @@ export default function Menu({ openProduct, onAdd }: { openProduct: (id: string)
                 <p className={`${FIELD} max-w-[round(calc(var(--u)*360),4px)] text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] break-words text-[#929292]`}>
                   {cat !== 0 ? `У категорії «${current.label}» за` : 'За'} запитом «{query.trim()}» нічого немає. Спробуйте інше слово.
                 </p>
-                <PrimaryButton className="mt-[round(calc(var(--u)*8),4px)] max-w-[round(calc(var(--u)*240),4px)]" onClick={() => setQuery('')}>
+                <PrimaryButton className="mt-[round(calc(var(--u)*8),4px)] md:max-w-[round(calc(var(--u)*240),4px)]" onClick={() => setQuery('')}>
                   Очистити пошук
                 </PrimaryButton>
               </div>

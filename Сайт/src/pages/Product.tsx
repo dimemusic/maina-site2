@@ -101,7 +101,7 @@ function ProductView({ p, go, openProduct, onAdd }: Props & { p: ProductData }) 
                 <p className="font-['Montserrat',sans-serif] wdth text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] font-normal text-[#4c5147]">{opt.note.replace('за', 'За')}</p>
               </div>
               <PrimaryButton
-                className="h-[round(calc(var(--u)*64),4px)]! max-w-[round(calc(var(--u)*224),4px)] gap-[round(calc(var(--u)*16),4px)] px-[round(calc(var(--u)*24),4px)]"
+                className="h-[round(calc(var(--u)*64),4px)]! md:max-w-[round(calc(var(--u)*224),4px)] gap-[round(calc(var(--u)*16),4px)] px-[round(calc(var(--u)*24),4px)]"
                 onClick={() => {
                   onAdd(id, opt.key)
                   setAdded(true)
@@ -123,11 +123,11 @@ function ProductView({ p, go, openProduct, onAdd }: Props & { p: ProductData }) 
                 </div>
               </div>
             )}
-            <div className="mt-[round(calc(var(--u)*48),4px)] grid grid-cols-3">
+            <div className="mt-[round(calc(var(--u)*48),4px)] flex flex-col md:grid md:grid-cols-3">
               {['Формат', 'Приготування', 'Зберігання'].map((k, i) => [k, d.facts[i]]).map(([k, v], i) => (
-                <div key={k} className={`group flex flex-col gap-[round(calc(var(--u)*8),4px)] px-[round(calc(var(--u)*16),4px)] ${i === 1 ? 'border-x border-[#e0e0e0]' : ''}`}>
-                  <p className="font-['Montserrat',sans-serif] wdth text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*16),4px)] font-normal tracking-[calc(var(--u)*2)] text-[#afafaf] uppercase transition-colors duration-300 group-hover:text-[#bf9064]">{k}</p>
-                  <p className="font-['Montserrat',sans-serif] wdth text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] font-semibold text-[#4c5147]">{v}</p>
+                <div key={k} className={`group flex items-baseline justify-between gap-[round(calc(var(--u)*16),4px)] border-b border-[#e0e0e0] py-[round(calc(var(--u)*12),4px)] last:border-b-0 md:flex-col md:items-stretch md:justify-start md:gap-[round(calc(var(--u)*8),4px)] md:border-b-0 md:px-[round(calc(var(--u)*16),4px)] md:py-0 ${i === 1 ? 'md:border-x' : ''}`}>
+                  <p className="font-['Montserrat',sans-serif] wdth shrink-0 text-xs md:text-[length:round(calc(var(--u)*14),2px)] leading-[round(calc(var(--u)*16),4px)] font-normal tracking-[calc(var(--u)*1)] md:tracking-[calc(var(--u)*2)] text-[#afafaf] uppercase transition-colors duration-300 group-hover:text-[#bf9064]">{k}</p>
+                  <p className="font-['Montserrat',sans-serif] wdth text-right md:text-left text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] font-semibold text-[#4c5147]">{v}</p>
                 </div>
               ))}
             </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type ClipboardEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type FocusEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { PrimaryButton } from './Layout'
 import { sized, useContent } from '../lib/content'
 import { cartTotals, findOption, normalizePhone, promoDiscount, type Line } from '../lib/order-math.js'
@@ -180,6 +180,9 @@ export default function Cart({
   const [serverError, setServerError] = useState('')
   const [orderNumber, setOrderNumber] = useState('')
   const [confirmClear, setConfirmClear] = useState(false)
+  // Поки поле форми у фокусі (на телефоні відкрита клавіатура), нижній блок із «Разом» ховаємо, щоб він не закривав поля
+  const [isTyping, setIsTyping] = useState(false)
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const { byId: P, site } = useContent()
   const { saved, total } = cartTotals(lines, P)
   const count = lines.reduce((s, l) => s + l.qty, 0)
@@ -203,6 +206,26 @@ export default function Cart({
   useEffect(() => {
     if (!open || lines.length === 0) setConfirmClear(false)
   }, [open, lines.length])
+
+  // Форма могла зникнути разом із полем у фокусі (blur тоді не спрацює), тому скидаємо стан сами
+  useEffect(() => {
+    clearTimeout(typingTimer.current)
+    setIsTyping(false)
+  }, [open, step])
+
+  useEffect(() => () => clearTimeout(typingTimer.current), [])
+
+  const onFormFocus = (e: FocusEvent<HTMLFormElement>) => {
+    if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) return
+    clearTimeout(typingTimer.current)
+    setIsTyping(true)
+  }
+
+  // Невелика затримка: при переході між полями blur іде перед focus, а клік по кнопці не має губитись
+  const onFormBlur = () => {
+    clearTimeout(typingTimer.current)
+    typingTimer.current = setTimeout(() => setIsTyping(false), 150)
+  }
 
   // Підказки міст: debounce 300 мс, застарілі запити скасовуємо
   useEffect(() => {
@@ -368,16 +391,16 @@ export default function Cart({
             <h3 className="font-evo-bold text-[length:round(calc(var(--u)*24),2px)] leading-[round(calc(var(--u)*32),4px)] text-[#3a4c38]">Дякуємо за замовлення!</h3>
             {orderNumber && <p className="font-evo-bold text-[length:round(calc(var(--u)*20),2px)] leading-[round(calc(var(--u)*28),4px)] text-[#3a4c38]">Ваш номер замовлення: №{orderNumber}</p>}
             <p className={`${F} max-w-[round(calc(var(--u)*320),4px)] text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] text-[#4c5147]`}>Ми зателефонуємо протягом 15 хвилин, щоб підтвердити деталі та доставку.</p>
-            <PrimaryButton className="mt-[round(calc(var(--u)*8),4px)] max-w-[round(calc(var(--u)*240),4px)]" onClick={onClose}>Продовжити покупки</PrimaryButton>
+            <PrimaryButton className="mt-[round(calc(var(--u)*8),4px)] md:max-w-[round(calc(var(--u)*240),4px)]" onClick={onClose}>Продовжити покупки</PrimaryButton>
           </div>
         ) : lines.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-[round(calc(var(--u)*16),4px)] px-[round(calc(var(--u)*32),4px)] text-center">
             <p className="font-evo-bold text-[length:round(calc(var(--u)*24),2px)] leading-[round(calc(var(--u)*32),4px)] text-[#3a4c38]">Кошик порожній</p>
             <p className={`${F} text-[length:round(calc(var(--u)*16),2px)] leading-[round(calc(var(--u)*24),4px)] text-[#929292]`}>Додайте щось смачне з нашого меню</p>
-            <PrimaryButton className="mt-[round(calc(var(--u)*8),4px)] max-w-[round(calc(var(--u)*240),4px)]" onClick={onClose}>До меню</PrimaryButton>
+            <PrimaryButton className="mt-[round(calc(var(--u)*8),4px)] md:max-w-[round(calc(var(--u)*240),4px)]" onClick={onClose}>До меню</PrimaryButton>
           </div>
         ) : step === 'checkout' ? (
-          <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
+          <form onSubmit={submit} onFocus={onFormFocus} onBlur={onFormBlur} noValidate className="flex min-h-0 flex-1 flex-col">
             <div className="flex-1 overflow-y-auto px-[round(calc(var(--u)*32),4px)] py-[round(calc(var(--u)*16),4px)]">
               <button type="button" onClick={() => setStep('cart')} className={`${F} mb-[round(calc(var(--u)*16),4px)] cursor-pointer text-[length:round(calc(var(--u)*14),2px)] text-[#929292] hover:text-[#3a4c38]`}>
                 ← Назад до кошика
@@ -458,7 +481,7 @@ export default function Cart({
                 </div>
               </div>
             </div>
-            <footer className="flex flex-col gap-[round(calc(var(--u)*16),4px)] border-t border-[#e9e9e9] px-[round(calc(var(--u)*32),4px)] py-[round(calc(var(--u)*24),4px)]">
+            <footer className={`flex flex-col gap-[round(calc(var(--u)*16),4px)] border-t border-[#e9e9e9] px-[round(calc(var(--u)*32),4px)] py-[round(calc(var(--u)*24),4px)] ${isTyping ? 'max-md:hidden' : ''}`}>
               <div className="flex items-baseline justify-between">
                 <span className="font-evo-bold text-[length:round(calc(var(--u)*20),2px)] text-[#3a4c38]">Разом</span>
                 <span className={`${F} text-[length:round(calc(var(--u)*28),2px)] font-semibold text-[#b05a3f]`}>{total} ₴</span>
@@ -468,7 +491,7 @@ export default function Cart({
                   {serverError}
                 </p>
               )}
-              <PrimaryButton type="submit" disabled={sending} className="max-w-none">
+              <PrimaryButton type="submit" disabled={sending} className="max-w-none!">
                 {sending ? 'Надсилаємо…' : 'Підтвердити замовлення'}
               </PrimaryButton>
             </footer>
@@ -578,7 +601,7 @@ export default function Cart({
                 <span key={total} className={`${F} animate-fade text-[length:round(calc(var(--u)*32),2px)] leading-[round(calc(var(--u)*40),4px)] font-semibold text-[#b05a3f]`}>{total} ₴</span>
               </div>
               <PrimaryButton
-                className="max-w-none"
+                className="max-w-none!"
                 onClick={() => {
                   setServerError('')
                   setStep('checkout')
